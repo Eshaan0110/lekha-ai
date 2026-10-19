@@ -70,7 +70,7 @@ class RequestContextMiddleware:
             logger.exception("unhandled_exception")
             if response_started:
                 raise  # Too late to send a clean error; let the server close the connection.
-            response = internal_error_response(request_id)
+            response = internal_error_response()
             await response(scope, receive, send_with_request_id)
         finally:
             duration_ms = round((time.perf_counter() - started) * 1000, 2)

@@ -58,6 +58,14 @@ Overall: **Build work complete; end-of-phase report written ([reports/phase-1-re
    ~~`Idempotency-Key` on write endpoints~~ — done (slice 7, ADR-0011). Still open from the plan: audit reader endpoint (`GET /api/v1/audit`).
 6. ~~Backups for Qdrant snapshots and object storage; restore drill~~ — done (slice 6, ADR-0010).
 
-## Phases 2–7
+## Phase 2 — Document ingestion (local, synthetic data only)
+
+Owner GO on 2026-10-19 for local development with synthetic documents only. Before building:
+the error envelope now matches the plan exactly (done), and the Phase 2 plan is
+**Proposed**: [design/phase-2-plan.md](design/phase-2-plan.md), with four owner decisions
+(D1 extractor, D2 language detection, D3 BGE-M3 download and runtime, D4 synthetic corpus).
+
+## Phases 3–7
+
 
 Not started. Must not begin before Phase 1 acceptance and explicit owner approval.

@@ -93,7 +93,7 @@ def test_response_is_withheld_when_the_audit_write_fails(
         "error": {
             "code": "internal_error",
             "message": "An unexpected error occurred.",
-            "request_id": "rid-audit-fail",
+            "detail": {},
         }
     }
     assert response.headers["X-Request-ID"] == "rid-audit-fail"

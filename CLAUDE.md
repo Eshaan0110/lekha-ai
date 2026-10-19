@@ -579,3 +579,9 @@ protected `/api/v1` routes; the append-only audit log (ADR-0008); document uploa
 Accepted). The Phase 1 end-of-phase report is written
 ([`docs/reports/phase-1-report.md`](docs/reports/phase-1-report.md)); waiting for the owner's
 go/no-go before Phase 2. Group OIDC and AWS deployment remain blocked on Phase 0.
+
+**Phase 2 (2026-10-19):** owner GO for local development with **synthetic documents only**.
+The error envelope now matches the plan. The Phase 2 plan
+([`docs/design/phase-2-plan.md`](docs/design/phase-2-plan.md)) is **Proposed**; build nothing
+until the owner approves it and decides D1–D4. Commit rule: one commit per finished piece of
+work, push only when the owner says.

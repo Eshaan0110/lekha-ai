@@ -83,9 +83,7 @@ class AuditMiddleware:
                 except Exception:  # any storage failure must block the response
                     logger.exception("audit_write_failed")
                     suppress_body = True
-                    await internal_error_response(scope.get("state", {}).get("request_id"))(
-                        scope, receive, send
-                    )
+                    await internal_error_response()(scope, receive, send)
                     return
             elif suppress_body:
                 return  # drop the original body: it was never audited

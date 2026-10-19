@@ -1,6 +1,6 @@
 # ADR-0006: Error envelope, request IDs, and health endpoints
 
-- **Status:** Proposed. To be reconciled with the Implementation Plan's API conventions once it is supplied.
+- **Status:** Proposed. Error envelope aligned with the Implementation Plan on 2026-10-19 at the owner's request.
 - **Date:** 2026-10-17
 
 ## Context
@@ -9,9 +9,13 @@ readiness endpoints. The exact shapes are defined in the Implementation Plan, wh
 yet in the repository.
 
 ## Decision
-- **Error envelope:** `{"error": {"code", "message", "request_id", "details?"}}`. Codes are
-  stable snake_case strings (`not_found`, `validation_error`, `internal_error`, and so on).
-  Validation details give the field location and the reason, never the submitted value.
+- **Error envelope (the plan's exact shape):** `{"error": {"code", "message", "detail": {}}}`.
+  Codes are stable snake_case strings from the plan's table (`unauthenticated`, `forbidden`,
+  `not_found`, `conflict`, `validation_error`, `rate_limited`, `upstream_unavailable`) plus
+  `internal_error`, `bad_request`, `payload_too_large`, `unsupported_media_type` and
+  `length_required`. `detail` is always an object; validation errors put each field's
+  location and reason in `detail.fields`, never the submitted value. The request ID is not
+  in the body: the plan puts it in the `X-Request-ID` header of every response.
   Unhandled exceptions become a generic 500; the stack trace is logged on the server only.
 - **Request ID:** `X-Request-ID` is accepted only if it matches `^[A-Za-z0-9._-]{1,64}$`;
   otherwise a UUID4 hex value is generated. It is returned on every response and attached

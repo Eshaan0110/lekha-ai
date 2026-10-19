@@ -1,8 +1,10 @@
-"""The common error envelope.
+"""The common error envelope, exactly as the Implementation Plan defines it::
 
-Every error response has the same shape so clients can handle errors uniformly::
+    {"error": {"code": "not_found", "message": "...", "detail": {}}}
 
-    {"error": {"code": "not_found", "message": "...", "request_id": "...", "details": [...]}}
+``detail`` is always an object; for validation errors it carries ``fields``, the location
+and reason of each problem. The request ID is in the ``X-Request-ID`` response header (plan:
+"X-Request-ID on every response for log correlation"), not in the body.
 
 Internal exception text, stack traces, and submitted input values are never returned.
 """
@@ -12,7 +14,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
@@ -21,11 +23,14 @@ class FieldError(BaseModel):
     message: str
 
 
+class ErrorDetail(BaseModel):
+    fields: list[FieldError] | None = None
+
+
 class ErrorBody(BaseModel):
     code: str
     message: str
-    request_id: str | None = None
-    details: list[FieldError] | None = None
+    detail: ErrorDetail = Field(default_factory=ErrorDetail)
 
 
 class ErrorEnvelope(BaseModel):
@@ -52,22 +57,17 @@ def error_response(
     status_code: int,
     code: str,
     message: str,
-    request_id: str | None,
-    details: list[FieldError] | None = None,
+    *,
+    fields: list[FieldError] | None = None,
 ) -> JSONResponse:
     body = ErrorEnvelope(
-        error=ErrorBody(code=code, message=message, request_id=request_id, details=details)
+        error=ErrorBody(code=code, message=message, detail=ErrorDetail(fields=fields))
     )
     return JSONResponse(status_code=status_code, content=body.model_dump(exclude_none=True))
 
 
-def internal_error_response(request_id: str | None) -> JSONResponse:
-    return error_response(500, "internal_error", "An unexpected error occurred.", request_id)
-
-
-def _request_id(request: Request) -> str | None:
-    value = request.scope.get("state", {}).get("request_id")
-    return value if isinstance(value, str) else None
+def internal_error_response() -> JSONResponse:
+    return error_response(500, "internal_error", "An unexpected error occurred.")
 
 
 async def _http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -76,7 +76,7 @@ async def _http_exception_handler(request: Request, exc: Exception) -> JSONRespo
     code = _STATUS_CODES.get(exc.status_code, "error")
     # Only our own handlers raise HTTPException with a detail string meant for clients.
     message = exc.detail if isinstance(exc.detail, str) else code.replace("_", " ")
-    response = error_response(exc.status_code, code, message, _request_id(request))
+    response = error_response(exc.status_code, code, message)
     if exc.headers:
         response.headers.update(exc.headers)
     return response
@@ -86,16 +86,14 @@ async def _validation_exception_handler(request: Request, exc: Exception) -> JSO
     if not isinstance(exc, RequestValidationError):  # guaranteed by registration below
         raise TypeError(type(exc).__name__)
     # Report where and why validation failed, but never echo the submitted value.
-    details = [
+    fields = [
         FieldError(
             location=[str(p) if not isinstance(p, int) else p for p in err["loc"]],
             message=str(err["msg"]),
         )
         for err in exc.errors()
     ]
-    return error_response(
-        422, "validation_error", "The request is invalid.", _request_id(request), details
-    )
+    return error_response(422, "validation_error", "The request is invalid.", fields=fields)
 
 
 def register_error_handlers(app: FastAPI) -> None:

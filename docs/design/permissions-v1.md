@@ -181,7 +181,7 @@ OIDC flow.
 
 | Plan says | Built so far | Proposed action |
 |---|---|---|
-| Error envelope `{"error": {"code", "message", "detail": {...}}}` | `details` list + `request_id` in the body | Align with the plan: rename to `detail` (an object); keep `request_id` (harmless addition) |
+| Error envelope `{"error": {"code", "message", "detail": {...}}}` | `details` list + `request_id` in the body | **Done 2026-10-19:** exact plan shape; request ID in the `X-Request-ID` header only |
 | 503 code `upstream_unavailable` | `service_unavailable` | Rename to match the plan |
 | Settings at `lekha/config.py` | `lekha/core/config.py` | Keep (documented deviation), or move; minor |
 | Local storage: MinIO | SeaweedFS (ADR-0005, approved) | None |

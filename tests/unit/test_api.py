@@ -102,9 +102,9 @@ def test_response_gets_generated_request_id(client: TestClient) -> None:
 def test_unknown_route_returns_error_envelope(client: TestClient) -> None:
     response = client.get("/nope", headers={REQUEST_ID_HEADER: "rid-404"})
     assert response.status_code == 404
-    assert response.json() == {
-        "error": {"code": "not_found", "message": "Not Found", "request_id": "rid-404"}
-    }
+    # The plan's envelope: code, message, detail. The request ID travels in the header.
+    assert response.json() == {"error": {"code": "not_found", "message": "Not Found", "detail": {}}}
+    assert response.headers[REQUEST_ID_HEADER] == "rid-404"
 
 
 def test_validation_error_reports_fields_without_echoing_input(client: TestClient) -> None:
@@ -112,7 +112,7 @@ def test_validation_error_reports_fields_without_echoing_input(client: TestClien
     assert response.status_code == 422
     error = response.json()["error"]
     assert error["code"] == "validation_error"
-    assert error["details"][0]["location"] == ["body", "name"]
+    assert error["detail"]["fields"][0]["location"] == ["body", "name"]
     assert "zz" not in response.text
 
 
@@ -123,7 +123,7 @@ def test_unhandled_exception_returns_generic_500(client: TestClient) -> None:
         "error": {
             "code": "internal_error",
             "message": "An unexpected error occurred.",
-            "request_id": "rid-500",
+            "detail": {},
         }
     }
     assert response.headers[REQUEST_ID_HEADER] == "rid-500"
