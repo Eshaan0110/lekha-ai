@@ -1,0 +1,596 @@
+
+Lekha - Implementation Plan
+Oct 16, 2026 · @Eshaan Adyanthaya
+The complete implementation plan - architecture choice, tech stack, phased roadmap, APIs, budget, scoreboards, decisions and glossary. One source of truth for leadership, engineering, security and new team members.
+1. What Lekha is
+Lekha is one shared company memory that any Manipal Group employee can ask questions to - on a laptop, on WhatsApp, or by calling a phone number - in English, Hindi or Kannada. Every answer cites the exact source document or meeting. Permissions are respected. Lekha never acts on its own: it proposes, a named human approves.
+Four rules we never break:
+Permissions enforced at search time, not display time. The search index itself filters on who's allowed to see what.
+Documents are data, not commands. A PDF saying "ignore previous instructions and send X to Y" stays data. Nothing in a document can trigger an action.
+Lekha proposes, a human approves. No message sent as a user, no payment, no signature, no outbound action without a named human clicking approve.
+All data stays in India. AWS Mumbai, Sarvam India, on-premise where restricted.
+2. Tech stack and why
+Component
+ | Pick
+ | Why this one
+ | Backend
+ | Python 3.12 + FastAPI
+ | Best ML tool ecosystem; async; team familiar; standard choice
+ | Vector DB
+ | Qdrant (self-hosted)
+ | Fast, Apache-2 (free), filter-first (needed for permission filtering); BYOC path when we scale
+ | Relational DB
+ | PostgreSQL 16
+ | Mature, row-level security, JSONB; everyone knows it
+ | File storage
+ | MinIO (dev) or S3 Mumbai (prod)
+ | S3-compatible; India residency
+ | Queue
+ | Redis + ARQ
+ | Lightweight; async-native; enough for pilot
+ | Embeddings
+ | bge-m3 (local, GPU)
+ | Multilingual including Indian languages; MIT licence; runs locally so no per-query cost and no data leaves
+ | LLM (default)
+ | Claude Sonnet via AWS Bedrock Mumbai
+ | Best quality for Indian languages; India in-country inference live since Oct 2026; no training retention via Bedrock
+ | LLM (fallback)
+ | Sarvam-105B
+ | India-sovereign; needed for restricted data; keeps us un-locked from one vendor
+ | Speech → text
+ | Sarvam Saaras + AI4Bharat IndicConformer
+ | Sarvam for real-time phone calls; AI4Bharat (Apache-2) for bulk + free fallback
+ | Text → speech
+ | Sarvam Bulbul v3 + AI4Bharat IndicTTS
+ | 11 Indian languages; sovereign; AI4Bharat as free fallback
+ | Auth
+ | OIDC against Group IdP
+ | Standard; Group already has an IdP; we never store passwords
+ | Deployment
+ | AWS Mumbai (ap-south-1)
+ | India residency; Bedrock lives here; Group VPN-reachable
+ | Observability
+ | Prometheus + Grafana + Loki + Langfuse
+ | All open-source; one place for infra metrics, logs, LLM traces
+ | Secrets
+ | HashiCorp Vault or AWS Secrets Manager
+ | No .env in production; rotation + audit
+ | Guiding principles behind these picks
+Free-first. Every component defaults to open-source except LLM, speech, telephony and WhatsApp (where quality or network effects demand paid).
+Pluggable model layer. Claude, Sarvam, anything else sits behind one interface so a provider swap doesn't rewrite the app.
+Modular monolith, not microservices. One Python app with clean module boundaries. Extracting services later is easy; recombining a split-too-early system is not.
+No Kubernetes for the pilot. One or two hardened EC2 hosts. K8s only when scale demands it (Phase 6+).
+India residency is non-negotiable. DPDP full compliance by 13 May 2027. Every provider must have an India processing path and a signed data-processor contract.
+3. Architecture - options and what we chose
+Three architectures were considered. We recommend Option B - a modular monolith on AWS Mumbai with a pluggable model layer - for the pilot and first production rollout, with a clean migration path to Option C when restricted data or multi-site load demands it.
+Dimension
+ | A. Minimal local-first
+ | B. Modular monolith on AWS Mumbai (chosen)
+ | C. On-premise distributed
+ | Purpose
+ | Fast demo
+ | Pilot and initial production
+ | Restricted data, multi-site scale
+ | Hosting
+ | Dev laptops, 1 small VM
+ | Single hardened Linux host, AWS Mumbai
+ | Group DC, 3+ nodes, Kubernetes
+ | LLM
+ | Claude Haiku API or local Llama
+ | Claude Sonnet via Bedrock Mumbai + Sarvam fallback
+ | Sarvam self-hosted + Bedrock for non-restricted
+ | Vector store
+ | Qdrant single node
+ | Qdrant single node + daily backups
+ | Qdrant 3-node cluster
+ | DB
+ | Postgres single node
+ | Postgres with WAL archiving
+ | Postgres HA (Patroni)
+ | Storage
+ | MinIO local
+ | MinIO or S3 Mumbai
+ | MinIO cluster / SAN
+ | Auth
+ | Local accounts
+ | Group OIDC
+ | OIDC + MFA + SCIM
+ | Monthly infra (approx.)
+ | ₹0–5k
+ | ₹35–80k
+ | ₹2–5L
+ | Suitable for confidential data
+ | No
+ | Yes, after release gate
+ | Yes, including the strictest
+ | First production rollout
+ | No
+ | Yes
+ | No - over-engineered for now
+ | Why Option B
+Option A fails on residency, auditability and reliability - it's a demo, not a product.
+Option C solves problems the pilot does not yet have (multi-site load, strictly on-prem material) and introduces Kubernetes, distributed Postgres and Qdrant clusters that would consume all engineering capacity for months.
+Option B is the smallest architecture that meets security, privacy and performance for the pilot, and leaves clear seams for Option C when needed.
+What would move us from B to C
+Corpus too large for a single Qdrant node (above ~50M chunks).
+A business unit whose data classification forbids any cloud, even AWS Mumbai.
+MCP load patterns interfering with interactive user requests → extract MCP into its own service.
+None of these is likely in the first six months. The design accepts them when they arrive.
+4. The implementation plan - phase by phase
+Eight phases. Each ends with a go/no-go review. A failed phase pauses the project rather than pushes through. Durations are working-time estimates; calendar time is longer because of Legal and IT dependencies that overlap between phases.
+Phase
+ | What we build
+ | Who uses it
+ | Duration
+ | Done when
+ | 0. Discovery
+ | Settle the open questions: which business, which docs, Clavis read scope with Legal, IdP setup, AWS account provisioning, processor contracts started
+ | Nobody yet
+ | ~3 weeks
+ | Business sponsor confirmed; Clavis scope agreed; IdP configured; AWS account ready
+ | 1. Secure foundation
+ | Backend skeleton, SSO login, Postgres schema, file storage, audit log - the plumbing
+ | Team only
+ | ~3 weeks
+ | A user signs in via SSO; audit log captures every request; backup + restore tested
+ | 2. Ingest documents
+ | Upload PDFs/Word → extract text → chunk → embed → index in Qdrant with permissions copied in
+ | Team only
+ | ~4 weeks
+ | 100 real approved documents indexed; 0 permission anomalies on 50-Q red-team; delete workflow verified end-to-end
+ | 3. Grounded Q&A
+ | Retrieval + Claude answer + inline citations + abstention when evidence is weak
+ | Team + a few testers
+ | ~3 weeks
+ | ≥90% citation correctness on 100-Q golden set; 0 permission leaks; p95 answer ≤6s
+ | 4. Daily-use pilot
+ | Meeting notes import, glossary of names, pilot UI, user support channel
+ | 20 real users at one business
+ | ~4 weeks
+ | 20 users active weekly for 4 straight weeks; sponsor attests it's useful
+ | 5. Phone pilot
+ | HR policy answers over phone in Kannada + Hindi, ticket creation via proposal + approval
+ | 50 shop-floor workers at one factory
+ | ~6 weeks
+ | WER within threshold; 0 disclosure incidents; 50 users for 4 weeks
+ | 6. Open it up
+ | MCP server (so other AI tools can query Lekha, read-only), more connectors, second business
+ | Multiple business units
+ | ~6 weeks
+ | MCP red-team passes; second BU reaches its WAU threshold
+ | 7. Hardening
+ | Load testing, DR drills, external-partner readiness, HA infrastructure
+ | Group-wide
+ | ~6+ weeks
+ | All SLOs met for 90 straight days; sponsor sign-off for externalisation
+ | Timeline at a glance
+End of month 1: Phase 0 done, Phase 1 running.
+End of month 3: Phase 3 done - first real grounded answers.
+End of month 4–5: Phase 4 pilot live with 20 users.
+End of month 6–7: Phase 5 phone pilot live at one factory.
+End of month 10: Phase 6 - MCP + second business.
+End of month 12–14: Phase 7 - enterprise-grade.
+Why this order
+Ingestion before retrieval. Can't search what isn't there yet.
+Retrieval before generation. The AI is only as good as what we hand it. Weak retrieval → hallucinations or over-abstention. Both bad.
+Generation before action. Must trust what the system says before letting it propose things to approve.
+Action before MCP. MCP opens Lekha to external callers; inner controls (permissions, abstention, injection resistance) must be proven first.
+MCP before external customers. Don't sell a platform before it is one.
+What we don't do, in any phase
+Sign contracts, make payments, send messages pretending to be a human.
+Fine-tune on confidential contracts (we retrieve, we don't train).
+Autonomous outbound actions.
+Confidential production data until Phase 2's release gate (SSO, audit, backup, red-team, DPDP checklist, processor contracts) passes.
+5. First 30 days (Phase 1 detail)
+Three weeks, 15 working days. Team: 1 platform engineer + 1 AI engineer + 0.5 product owner. IT and Legal on call.
+Week 1 - Login and skeleton
+Day
+ | What gets done
+ | 1
+ | Kick-off meeting; GitHub repo; AWS access; Docker Compose dev stack (Postgres + Qdrant + MinIO + Redis) running locally
+ | 2
+ | FastAPI skeleton; OIDC login against dev IdP; a protected hello-world endpoint
+ | 3
+ | Postgres schema v1 (users, documents, versions, ACLs); Alembic migrations
+ | 4
+ | File upload endpoint; MinIO storage; checksums; type + size validation
+ | 5
+ | Audit log table and middleware; structured logs; request-ID correlation
+ | End of week 1: a test user signs in via SSO and we see them in the audit log.
+Week 2 - Ingest a document
+Day
+ | What gets done
+ | 6
+ | ARQ worker; ingestion_job table; stage dispatcher
+ | 7
+ | PDF/DOCX extraction (Unstructured.io); language detection
+ | 8
+ | Heading-aware chunking; chunks written with language tags
+ | 9
+ | bge-m3 embeddings; Qdrant collection with payload indexes (incl. allowed_subjects)
+ | 10
+ | ACL propagation - permissions copied to Qdrant payload; filter-less query rejection guard
+ | End of week 2: upload a file → it's extracted, chunked, embedded, searchable. An unpermitted user can't see it.
+Week 3 - First answer and deploy
+Day
+ | What gets done
+ | 11
+ | Dense retrieval wired end-to-end; /api/v1/search with permission filter
+ | 12
+ | Claude via Bedrock; prompt template; structured response; first answer with inline citations
+ | 13
+ | Citation verifier (model's cited span must actually appear in source); abstention path
+ | 14
+ | Minimal web UI (sign in → ask → see answer with clickable citations)
+ | 15
+ | Deploy to AWS Mumbai staging; Prometheus/Grafana dashboards; Postgres backup + one restore test
+ | End of week 3: a user signs in via SSO, uploads a policy, asks a question, gets a cited answer. A second user without permission can't see that policy.
+Not in these 30 days
+Phone, WhatsApp, meeting imports, Clavis, action proposals, MCP, confidential data. All later phases.
+If 30 days turns out to be too short
+Shrink the scope - same shape, fewer features. Never cut corners on security. A half-done permission filter is worse than no slice at all.
+6. APIs and repository structure
+Repository layout
+lekha/├── apps/│   ├── api/              # FastAPI entrypoint, routers, middleware│   ├── worker/           # ARQ workers for ingestion + actions│   └── scripts/          # one-off scripts, backfills│├── lekha/                # business modules│   ├── auth/             # OIDC, sessions, permissions│   ├── memory/           # documents, versions, chunks, glossary│   ├── ingestion/        # pipeline + source adapters│   ├── retrieval/        # hybrid retrieval, filters, reranker│   ├── generation/       # prompt assembly, model clients, citation verifier│   ├── speech/           # STT, TTS, language detection│   ├── actions/          # proposals, approvals, execution│   ├── connectors/       # outbound: ticketing, WhatsApp, telephony│   ├── mcp/              # MCP server (Phase 6)│   └── audit/            # append-only log│├── model_layer/          # pluggable interfaces (llm, embeddings, speech)├── db/                   # Alembic migrations, SQLAlchemy models├── frontend/             # React UI├── docs/                 # ADRs, runbooks, OpenAPI, eval├── tests/                # unit, integration, eval, security, load└── infra/                # Docker, Terraform, runbooks
+Module boundary rules
+Business modules (lekha/*) import each other only through public __init__.py interfaces.
+apps/* imports from business modules; never the reverse.
+model_layer/* depends on nothing in lekha/*.
+db/* is the only place that touches SQLAlchemy directly.
+Every cross-module call that crosses a trust boundary passes AuthContext explicitly.
+Key endpoints (Phases 0–3)
+Endpoint
+ | What it does
+ | POST /api/v1/documents
+ | Upload a document (multipart file + metadata JSON). Returns document_id, version_id, ingestion_job_id.
+ | GET /api/v1/ingestion-jobs/{id}
+ | Status of an ingestion job, stage by stage.
+ | POST /api/v1/search
+ | Permission-filtered search over chunks. Returns chunks with document_id, version_id, title, snippet, score.
+ | POST /api/v1/ask
+ | Ask a question. Returns an answer with inline citations, or an abstention with reason.
+ | GET /api/v1/documents?...
+ | Paginated list of documents the caller can see.
+ | POST /api/v1/deletion-requests
+ | Request deletion of a document, version or user data.
+ | GET /api/v1/audit?...
+ | Audit log, scoped to the caller's business unit. Requires audit_reader role.
+ | Endpoints added in later phases
+Phase 4: POST /api/v1/meetings/{id}/minutes, GET/POST/PATCH/DELETE /api/v1/glossary.
+Phase 5–6: POST /api/v1/actions/propose, POST /api/v1/actions/{id}/approve, GET /api/v1/actions/{id}.
+Phase 6: MCP tool schemas (see below).
+API conventions
+All endpoints under /api/v1/. Breaking changes go to /api/v2/.
+JSON only, UTF-8.
+Error envelope: { "error": { "code": "string", "message": "string", "detail": {...} } }.
+Pagination: cursor-based (?limit=50&cursor=...).
+Idempotency: write endpoints accept Idempotency-Key header.
+Rate limits: per-user + per-tenant, surfaced in X-RateLimit-* headers.
+X-Request-ID on every response for log correlation.
+Error codes
+Code
+ | Meaning
+ | HTTP
+ | unauthenticated
+ | No valid session
+ | 401
+ | forbidden
+ | Lacks permission
+ | 403
+ | not_found
+ | Not found or not visible
+ | 404
+ | conflict
+ | Idempotency clash / version conflict
+ | 409
+ | validation_error
+ | Request body failed validation
+ | 422
+ | rate_limited
+ | Over per-user or per-tenant limit
+ | 429
+ | upstream_unavailable
+ | Model or connector down
+ | 503
+ | abstained
+ | Model declined to answer (returned in body, not an HTTP error)
+ | 200
+ | MCP tool schemas (Phase 6)
+Read tool (no approval needed):
+{  "name": "search_memory",  "description": "Search the caller's company memory. Permission-scoped by caller identity.",  "read_only": true,  "approval_required": false,  "input_schema": { "query": "string", "filters": "object (optional)", "limit": "integer" },  "output_schema": { "results": "array", "next_cursor": "string|null" }}
+Write tool (always via proposal):
+{  "name": "log_ticket",  "description": "Propose a ticket. Returns a proposal id; a human must approve before it's created.",  "read_only": false,  "approval_required": true,  "input_schema": { "category": "string", "title": "string", "description": "string", "priority": "enum" },  "output_schema": { "proposal_id": "string", "status": "string" }}
+Write tools always return a proposal; there is no MCP path to direct execution.
+7. Budget, team and top risks
+Budget (INR, monthly, engineering salaries additional)
+Stage
+ | Cost
+ | When
+ | Early build (Phases 0–3)
+ | ₹3,000–₹5,000
+ | Months 1–3. Dev laptops + a small AI test budget. Nearly free.
+ | Internal pilot (Phase 4)
+ | ₹75,000–₹90,000
+ | Months 3–5. One AWS environment, 20 users, light AI usage.
+ | Phone pilot + more BUs (Phases 5–6)
+ | ₹3–5 lakh
+ | Months 5–10. Telephony, WhatsApp, more AI, better infra.
+ | Full production (Phase 7+)
+ | ₹5–7 lakh
+ | Month 10+. Multi-business, HA, full observability.
+ | Planning estimates. Reconfirmed against real usage during the pilot before Phase 5 commitments.
+What drives the pilot budget (Phase 4, ~₹75k/month)
+Line item
+ | Approx. monthly
+ | App host (EC2 m7g.large)
+ | ₹7,500
+ | GPU host for embeddings (g5.xlarge, part-time)
+ | ₹15,000
+ | Postgres (RDS db.t4g.medium)
+ | ₹5,500
+ | Qdrant on EC2
+ | ₹8,500
+ | Redis cache + queue
+ | ₹2,500
+ | S3 storage + backups
+ | ₹2,000
+ | Claude via Bedrock Mumbai
+ | ₹22,000
+ | Sarvam fallback + speech
+ | ₹7,500
+ | GitHub Actions, Secrets Manager, misc
+ | ₹5,000
+ | Total
+ | ~₹75,000
+ | One-time setup (not monthly): AWS hardening ~₹30,000; initial pentest ~₹1.5–3 lakh; DPDP Legal review ~₹1–2 lakh.
+Cost-reduction levers (apply once pilot volume is measured)
+Local embeddings and reranker. Already in the plan - removes per-call charges for the largest-volume AI call type.
+Tiered model router. Route routine lookups to a cheaper model (Haiku); reserve the frontier model (Sonnet) for complex syntheses. Cuts LLM spend 40–60% at a few percent quality cost.
+Reserved compute and committed-volume contracts. 1-year reserved EC2 saves ~30%. A Bolna enterprise contract drops telephony from ~₹5.5/min to ~₹2/min. Only commit after real pilot volume is seen.
+What cannot be cut
+Telephony: ₹1.75–₹5.5/min at India voice-AI pricing (2026).
+WhatsApp: Meta per-conversation fees (~₹0.78 marketing, ~₹0.115 utility, 1,000 free service conversations/month).
+Production HA infrastructure.
+Backups, DR, cross-region copies within India.
+On-call and incident response.
+Team
+Role
+ | Phases 0–3
+ | Phase 4+
+ | Product owner
+ | 0.5 FTE
+ | 0.5–1 FTE
+ | Platform engineer
+ | 1 FTE
+ | 1 FTE
+ | AI engineer
+ | 1 FTE
+ | 1 FTE
+ | Frontend engineer
+ | -
+ | 0.3–1 FTE
+ | QA / evaluation
+ | -
+ | 0.3 FTE
+ | Security engineer (reviewer, not builder)
+ | 0.25 FTE
+ | 0.25 FTE
+ | IT / Legal
+ | fractional
+ | fractional, more at gates
+ | The RFC's own line - "intern-led prototype" - is the single biggest risk to this plan. The team needs at minimum one PM and two engineers before the phone pilot. One person cannot ship this safely.
+Top five risks
+#
+ | Risk
+ | What we do about it
+ | 1
+ | Confidential data leaks because permissions aren't enforced
+ | Permission filter on every retrieval; 500-Q red-team before confidential data is ingested
+ | 2
+ | Wrong or made-up answers
+ | Every answer must cite a source; abstain if sources are weak; measured nightly against golden set
+ | 3
+ | Poor Indian-language transcription on noisy phone lines
+ | Measured in real factory conditions before phone go-live, not just in a studio
+ | 4
+ | DPDP Act compliance deadline (13 May 2027)
+ | Legal involved from Phase 0; consent, retention, deletion built in from day one
+ | 5
+ | Understaffed team can't deliver safely
+ | Minimum team non-negotiable; delay rather than cut safety corners
+ | 8. Success scoreboards
+Two separate scoreboards. A system can win one and lose the other. The pilot needs both green before we expand to a second business.
+Technical scoreboard
+Metric
+ | What it means
+ | P0 target
+ | P1 target
+ | Citation correctness
+ | Every claim traces back to a real source
+ | ≥ 0.90
+ | ≥ 0.95
+ | Answer faithfulness
+ | Answer does not go beyond the sources
+ | ≥ 0.90
+ | ≥ 0.93
+ | Permission violations
+ | A user saw something they shouldn't have
+ | 0 (hard blocker)
+ | 0 (hard blocker)
+ | Abstention correctness
+ | On unanswerable questions, Lekha says "I don't know"
+ | ≥ 0.85
+ | ≥ 0.90
+ | Retrieval Recall@10
+ | Right chunk appears in top-10
+ | ≥ 0.80
+ | ≥ 0.85
+ | WER (Hindi, phone-noisy)
+ | Transcription error rate on real factory audio
+ | -
+ | ≤ 0.25
+ | WER (Kannada, phone-noisy)
+ | Same, Kannada
+ | -
+ | ≤ 0.28
+ | p95 answer latency
+ | 95% of answers within this time
+ | ≤ 6s
+ | ≤ 4s
+ | Monthly availability
+ | SLO
+ | 99.0%
+ | 99.5%
+ | Business scoreboard
+Metric
+ | What it means
+ | Pilot threshold
+ | Weekly active users
+ | Out of invited cohort
+ | ≥ 60% for 4 consecutive weeks
+ | Questions per active user per week
+ | Signal of real usefulness
+ | ≥ 3 (desk), ≥ 1 (phone)
+ | Time saved per answered question
+ | In-app survey + diary studies
+ | ≥ 5 minutes average
+ | "Answer helped me"
+ | Weekly 1-item survey
+ | ≥ 70% yes
+ | Ticket completion when Lekha logged it
+ | Downstream ticketing
+ | ≥ 95% within SLA
+ | Repeat use (week N+1)
+ | Did they come back?
+ | ≥ 60%
+ | Cost per answered question
+ | Economics
+ | ≤ ₹5 (target to validate)
+ | Fraction of answers with cited sources
+ | Grounding discipline
+ | ≥ 0.95
+ | Expansion gate - before onboarding a second business
+Both scoreboards green for 4 consecutive weeks.
+First business's sponsor signed a written attestation that it's helping.
+Team has capacity; budget covers the second unit.
+Second business's data classification and ACL plan approved by Legal and the business sponsor.
+What is NOT a success metric
+Lines of code written.
+Number of features shipped.
+Press mentions.
+Comparisons to Granola, Instinct or Bolna - valuation anchors, not product targets.
+9. What leadership needs to decide
+Five decisions. Everything else the team works out. Without these, Phase 0 can't close.
+#
+ | Decision
+ | Recommendation
+ | Signed by
+ | 1
+ | Which Manipal Group business is first pilot?
+ | A manufacturing unit with Kannada + Hindi staff
+ | Chairman + business CEO
+ | 2
+ | Approve budget range (₹75–90k/mo pilot → ₹5–7L/mo production)
+ | Approve as-is
+ | Chairman + CFO
+ | 3
+ | Approve team (0.5 PM + 1 platform + 1 AI engineer to start)
+ | Approve - the RFC itself flags the staffing gap
+ | Chairman
+ | 4
+ | Release-gate principle: no confidential data until security checks pass
+ | Yes
+ | Chairman + Security
+ | 5
+ | IP ownership and structural intent - Group product, spin-out, or venture?
+ | Decide before Phase 2 ends so engineering choices don't need redoing
+ | Chairman
+ | What leadership does NOT need to decide now
+Which AI model (team picks - default Claude via Bedrock Mumbai, Sarvam as fallback).
+Which telephony vendor (team picks after a short bake-off in Phase 5).
+Technical architecture details (covered by this doc).
+What leadership gets back
+Monthly phase-gate review (60 min) with real numbers.
+Quarterly Chairman review of adoption, cost, risks.
+A written go/no-go recommendation at every phase end. If a phase fails its criteria, we recommend pause - not push forward.
+Next five concrete actions
+This week: Chairman signs off decisions 1–5 above.
+Phase 0 week 1: PM meets Group Legal to start DPDP review, processor-contract drafting, consent wording.
+Phase 0 week 1: PM + AI engineer meet Clavis team to agree the read scope.
+Phase 0 week 2: Procurement raises the Claude (Bedrock) and Sarvam contracts. IT scopes IdP + AWS Mumbai account.
+End of Phase 2: Chairman makes the IP + structural-intent decision so Phase 6 and 7 don't require a rework.
+10. Glossary and references
+Glossary
+Term
+ | What it means
+ | ACL
+ | Access Control List. The record saying which users or roles can read a document.
+ | ADR
+ | Architecture Decision Record. A short write-up explaining why we picked something over the alternatives.
+ | Abstention
+ | Lekha saying "I don't know" instead of guessing when evidence is weak.
+ | BU
+ | Business Unit. One of Manipal Group's businesses.
+ | BYOC
+ | Bring Your Own Cloud. A hosted service that runs inside your own cloud account for data residency.
+ | Chunk
+ | A small piece of a document (400–800 tokens) that search operates on.
+ | Clavis
+ | The Group's existing contracts and entities tool. Lekha reads from it via a connector; it is not training data.
+ | Connector
+ | A read-only adapter from Lekha to an external system (Clavis, SharePoint, Granola, etc).
+ | DPDP Act
+ | India's Digital Personal Data Protection Act (2023). Rules notified Nov 2025; full compliance 13 May 2027.
+ | Embedding
+ | A numeric fingerprint of a chunk's meaning; what the vector database stores.
+ | FTE
+ | Full-Time Equivalent. 0.5 FTE = half of one person's time.
+ | Golden set
+ | A curated set of questions with known-correct answers, used to measure quality over time.
+ | Hybrid retrieval
+ | Running both dense (semantic) and sparse (keyword) search and merging the results.
+ | IdP
+ | Identity Provider. The Group's single sign-on system.
+ | LID
+ | Language ID. Detecting which language a piece of text or audio is in.
+ | LLM
+ | Large Language Model. The AI that writes the answer (Claude, Sarvam).
+ | MCP
+ | Model Context Protocol. A standard that lets other AI tools call Lekha's tools safely.
+ | OIDC
+ | OpenID Connect. The protocol used for single sign-on.
+ | p95 latency
+ | The latency that 95% of requests come in under.
+ | PII
+ | Personally Identifiable Information (names, phone numbers, employee IDs, etc.).
+ | Prompt injection
+ | An attacker putting instructions in a document that try to hijack the AI's behaviour.
+ | RAG
+ | Retrieval-Augmented Generation. The pattern of retrieving sources first, then generating an answer from them.
+ | Red-team
+ | Deliberately trying to break a system (e.g. make it leak data) to find weaknesses before attackers do.
+ | Reranker
+ | A second-pass model that reorders search results by relevance.
+ | RLS
+ | Row-Level Security. A Postgres feature that filters rows per user automatically.
+ | RTO / RPO
+ | Recovery Time Objective (how fast we restore) / Recovery Point Objective (how much data we can lose).
+ | SLO
+ | Service Level Objective. A measurable commitment (e.g. "99.5% monthly availability").
+ | SSO
+ | Single Sign-On. One login for everything.
+ | STT / TTS
+ | Speech-to-Text / Text-to-Speech.
+ | Vector database
+ | A database that searches by meaning (via embeddings), not exact keywords. Qdrant is one.
+ | WER
+ | Word Error Rate. The main quality metric for speech-to-text.
+ | References
+Original Lekha RFC by Rahul Sharma, 7 October 2026.
+AWS Bedrock in Mumbai (ap-south-1) - in-country Claude inference available since 5 October 2026.
+DPDP Act 2023 and the Digital Personal Data Protection Rules, notified 13 November 2025, phased through 13 May 2027.
+Sarvam AI - Sarvam-105B language model and Bulbul v3 TTS, India-sovereign (sarvam.ai).
+AI4Bharat - IndicConformer, IndicWhisper and IndicTTS, Apache-2 licensed Indian-language models (ai4bharat.iitm.ac.in).
+Qdrant - open-source vector database (qdrant.tech), Apache-2 licence.
+Bolna - India-based voice-AI platform (bolna.ai).
+Model Context Protocol - modelcontextprotocol.io.

@@ -1,0 +1,121 @@
+# Lekha local development stack. NOT a production deployment.
+#
+# Start with `./dev.ps1 up` (reads ../../.env). All ports bind to 127.0.0.1 only,
+# so nothing is reachable from the local network.
+#
+# Image tags are pinned to exact patch releases; upgrade deliberately (see docs/adr/0003).
+
+name: lekha
+
+x-defaults: &defaults
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  postgres:
+    <<: *defaults
+    image: postgres:16.15-alpine
+    environment:
+      POSTGRES_DB: ${LEKHA_POSTGRES_DB:?run ./dev.ps1 setup}
+      POSTGRES_USER: ${LEKHA_POSTGRES_USER:?run ./dev.ps1 setup}
+      POSTGRES_PASSWORD: ${LEKHA_POSTGRES_PASSWORD:?run ./dev.ps1 setup}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    ports:
+      - "127.0.0.1:${LEKHA_POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits: { memory: 512m }
+
+  redis:
+    <<: *defaults
+    image: redis:8.2.10-alpine
+    environment:
+      REDISCLI_AUTH: ${LEKHA_REDIS_PASSWORD:?run ./dev.ps1 setup}
+    command:
+      - redis-server
+      - --requirepass
+      - ${LEKHA_REDIS_PASSWORD:?run ./dev.ps1 setup}
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 200mb
+      - --maxmemory-policy
+      - noeviction # a job queue must never silently drop jobs
+    ports:
+      - "127.0.0.1:${LEKHA_REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits: { memory: 256m }
+
+  qdrant:
+    <<: *defaults
+    image: qdrant/qdrant:v1.19.1
+    environment:
+      QDRANT__SERVICE__API_KEY: ${LEKHA_QDRANT_API_KEY:?run ./dev.ps1 setup}
+      QDRANT__TELEMETRY_DISABLED: "true"
+    ports:
+      - "127.0.0.1:${LEKHA_QDRANT_HTTP_PORT:-16333}:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      # The Qdrant image ships without curl/wget; probe the health endpoint over bash /dev/tcp.
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333 && printf \"GET /readyz HTTP/1.0\\r\\n\\r\\n\" >&3 && grep -q \"200 OK\" <&3'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits: { memory: 1g }
+
+  # S3-compatible object storage for local development only. Stands in for MinIO,
+  # whose community container images are no longer published (docs/adr/0005).
+  objectstore:
+    <<: *defaults
+    image: chrislusf/seaweedfs:4.48
+    command:
+      - server
+      - -dir=/data
+      - -s3
+      - -s3.port=8333
+      - -s3.config=/etc/lekha/s3.json
+      - -master.volumeSizeLimitMB=256
+      # SeaweedFS grows 7 volumes per bucket (collection). Volumes are files that grow on
+      # demand, not preallocated disk, so 64 slots cost nothing until used (~9 buckets).
+      - -volume.max=64
+    ports:
+      - "127.0.0.1:${LEKHA_S3_PORT:-18333}:8333"
+    volumes:
+      - objectstore-data:/data
+      - ./generated/s3.json:/etc/lekha/s3.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8333/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    deploy:
+      resources:
+        limits: { memory: 512m }
+
+volumes:
+  postgres-data:
+  redis-data:
+  qdrant-data:
+  objectstore-data:
