@@ -14,11 +14,12 @@ import structlog
 from fastapi import FastAPI
 from redis.asyncio import Redis
 
-from apps.api import health, routes_v1, uploads
+from apps.api import health, routes_v1, search, uploads
 from apps.api.audit import AuditMiddleware
 from apps.api.errors import register_error_handlers
 from apps.api.middleware import RequestContextMiddleware
 from apps.api.readiness import build_readiness_checks
+from apps.wiring import ArqJobQueue, JobQueue, build_embedder, build_vector_index
 from db.audit import PostgresAuditSink
 from db.engine import create_engine, create_session_factory
 from db.idempotency import IdempotencyStore
@@ -43,11 +44,13 @@ def create_app(
     readiness_checks: Sequence[ReadinessCheck] | None = None,
     audit_sink: AuditSink | None = None,
     object_store: ObjectStore | None = None,
+    job_queue: JobQueue | None = None,
 ) -> FastAPI:
     """Build the API. Tests may inject settings, readiness checks, audit sink and store."""
     settings = settings or Settings()  # values come from the environment
     configure_logging(settings)
     identity_provider = _build_identity_provider(settings)
+    embedder = build_embedder(settings)  # fails at startup if bge-m3 is chosen but absent
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -70,6 +73,9 @@ def create_app(
         app.state.audit_sink = audit_sink or PostgresAuditSink(app.state.session_factory)
         app.state.identity_provider = identity_provider
         app.state.object_store = store
+        app.state.embedder = embedder
+        app.state.vector_index = build_vector_index(settings)
+        app.state.job_queue = job_queue or ArqJobQueue(settings)
         app.state.idempotency = IdempotencyStore(
             app.state.session_factory, ttl=IDEMPOTENCY_TTL, stale_after=IDEMPOTENCY_STALE_AFTER
         )
@@ -83,6 +89,8 @@ def create_app(
             yield
         finally:
             await http.aclose()
+            await app.state.vector_index.close()
+            await app.state.job_queue.close()
             await redis.aclose()
             await engine.dispose()
             logger.info("api_stopped")
@@ -105,6 +113,7 @@ def create_app(
     app.include_router(health.router)
     app.include_router(routes_v1.router)
     app.include_router(uploads.router)
+    app.include_router(search.router)
     return app
 
 

@@ -21,11 +21,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from redis.exceptions import RedisError
 from sqlalchemy.exc import IntegrityError
 from starlette.datastructures import UploadFile
 
 from apps.api.auth import CurrentUser, require_auth_context
 from apps.api.idempotency import fingerprint, idempotency_key, response_for_claim
+from apps.wiring import JobQueue
 from db.documents import (
     NewDocument,
     canonical_key_taken,
@@ -34,6 +36,7 @@ from db.documents import (
     upload_source_id,
 )
 from db.idempotency import IdempotencyStore, KeyScope
+from db.ingestion import create_job
 from db.tenancy import tenant_transaction
 from lekha.auth import AuthContext, Classification, UploadDenial, upload_denial
 from lekha.memory import (
@@ -101,7 +104,7 @@ class UploadResult(BaseModel):
     version_number: int
     file: StoredFile
     ingestion_job_id: uuid.UUID | None = Field(
-        default=None, description="Always null until ingestion jobs exist (Phase 2)."
+        default=None, description="Track processing at GET /api/v1/ingestion-jobs/{id}."
     )
 
 
@@ -200,6 +203,7 @@ async def upload_document(request: Request, ctx: CurrentUser) -> JSONResponse:
             await idempotency.release(scope)  # nothing was created: the key may be reused
         raise
 
+    await _enqueue(request, ctx.organisation_id, result.ingestion_job_id)
     body = result.model_dump(mode="json")
     location = f"/api/v1/documents/{result.document_id}"
     if scope is not None:
@@ -207,6 +211,18 @@ async def upload_document(request: Request, ctx: CurrentUser) -> JSONResponse:
     # Only now does the document exist, so only now is it named in the audit event.
     _set_audit_target(request, str(result.document_id))
     return JSONResponse(status_code=201, content=body, headers={"Location": location})
+
+
+async def _enqueue(request: Request, organisation_id: uuid.UUID, job_id: uuid.UUID | None) -> None:
+    """Hand the job to the worker. The document is already safely stored, so a queue
+    outage is logged and the job stays "queued" rather than failing the upload."""
+    if job_id is None:
+        return
+    queue: JobQueue = request.app.state.job_queue
+    try:
+        await queue.enqueue_ingestion(organisation_id, job_id)
+    except (OSError, RedisError):
+        logger.exception("ingestion_enqueue_failed")
 
 
 def _set_audit_target(request: Request, document_id: str) -> None:
@@ -271,6 +287,7 @@ async def _create_document(
             await insert_uploaded_document(
                 s, new, source_system_id=source_id, now=datetime.now(UTC)
             )
+            job_id = await create_job(s, ctx.organisation_id, version_id)
     except IntegrityError:
         # Typically a concurrent upload with the same canonical_key won the race.
         await _remove_orphan(store, key, stored)
@@ -283,6 +300,7 @@ async def _create_document(
         document_id=document_id,
         version_id=version_id,
         version_number=1,
+        ingestion_job_id=job_id,
         file=StoredFile(
             filename=validated.filename,
             media_type=validated.media_type,

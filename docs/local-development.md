@@ -40,6 +40,7 @@ Non-default ports avoid clashing with other local projects (5432 and 6333 were a
 ./dev.ps1 migrate           # 3. apply migrations + create the API's limited DB login
 ./dev.ps1 seed              #    load the synthetic organisation and users (safe to re-run)
 ./dev.ps1 run               # 4. API with auto-reload
+./dev.ps1 worker            #    background ingestion worker (second terminal)
 ./dev.ps1 check             # 5. before every commit
 ./dev.ps1 test-integration  # 6. with the stack running
 ./dev.ps1 down              # 7. stop (volumes kept)

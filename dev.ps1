@@ -9,6 +9,7 @@
     ./dev.ps1 migrate           Apply migrations, provision the API's database login and bucket
     ./dev.ps1 seed              Load the SYNTHETIC dev organisation and users (idempotent)
     ./dev.ps1 seed -Reset       Rebuild the synthetic organisation from scratch
+    ./dev.ps1 worker            Run the background ingestion worker
     ./dev.ps1 run               Run the API on http://127.0.0.1:8000 with auto-reload
     ./dev.ps1 check             Format check, lint, type check, import boundaries, unit tests
     ./dev.ps1 test              Unit tests only (no Docker needed)
@@ -23,7 +24,7 @@
 param(
     [Parameter(Position = 0)]
     [ValidateSet('setup', 'up', 'status', 'migrate', 'run', 'check', 'test', 'test-integration',
-                 'backup', 'verify-backup', 'restore', 'logs', 'down', 'seed', 'help')]
+                 'backup', 'verify-backup', 'restore', 'logs', 'down', 'seed', 'worker', 'help')]
     [string]$Command = 'help',
     [string]$From,
     [switch]$Yes,
@@ -142,6 +143,10 @@ try {
             $seedArgs = @('run', '--locked', 'python', '-m', 'apps.scripts.seed_dev_data')
             if ($Reset) { $seedArgs += '--reset' }
             Invoke-Native 'uv' $seedArgs
+        }
+        'worker' {
+            # Background ingestion worker (extract, chunk, embed, index).
+            Invoke-Native 'uv' @('run', '--locked', 'arq', 'apps.worker.main.WorkerSettings')
         }
         'run' {
             Invoke-Native 'uv' @('run', '--locked', 'uvicorn', 'apps.api.main:create_app',

@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import uuid
 from enum import StrEnum
-from typing import Self
+from pathlib import Path
+from typing import Literal, Self
 
 from pydantic import AnyHttpUrl, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -79,6 +80,13 @@ class Settings(BaseSettings):
     allow_confidential_uploads: bool = False
 
     readiness_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
+
+    # Vector search (Phase 2). "fake" is a clearly labelled simulation used until the owner
+    # approves downloading BGE-M3 (Phase 2 plan, decision D3).
+    qdrant_collection: str = Field(default="lekha_chunks", pattern=r"^[a-z][a-z0-9_]{0,62}$")
+    embedder: Literal["fake", "bge-m3"] = "fake"
+    embedder_model_dir: Path = Path("models/bge-m3")
+    embedder_device: Literal["cpu", "cuda"] = "cpu"
 
     auth_mode: AuthMode = AuthMode.OIDC
     # The synthetic organisation the dev adapter signs users into (see seed_dev_data).

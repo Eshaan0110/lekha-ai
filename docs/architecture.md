@@ -31,6 +31,11 @@ db/audit.py          PostgreSQL audit sink
 db/documents.py      Writes for new uploads (document, file, version, guest list)
 lekha/memory/        Upload validation (pure), object-store interface, S3 adapter
 apps/api/uploads.py  POST /api/v1/documents
+apps/api/search.py   POST /api/v1/search, GET /api/v1/ingestion-jobs/{id}
+apps/worker/         ARQ worker and the ingestion pipeline (extract → chunk → embed → index)
+lekha/ingestion/     Text extraction, language by script, heading-aware chunking (pure)
+lekha/retrieval/     Permission filter from AuthContext; Qdrant adapter with the unscoped-search guard
+model_layer/         Embedder interface; fake embedder (simulation); BGE-M3 adapter (gated)
 apps/api/idempotency.py, db/idempotency.py  Idempotency-Key: claim, replay, complete, release
 apps/api/routes_v1.py  /api/v1/me, /api/v1/documents (cursor paging), /api/v1/documents/{id}
 tests/unit/          Fast tests, no Docker required
@@ -110,4 +115,6 @@ request ID, and turned into a generic `500 internal_error` envelope.
 | `GET /api/v1/me` | The caller's identity, roles and clearance per business unit | Signed in |
 | `GET /api/v1/documents?limit=&cursor=` | Documents the caller may read (cursor-paged) | Signed in |
 | `GET /api/v1/documents/{id}` | One document; `404` if missing **or** not visible | Signed in |
+| `POST /api/v1/search` | Permission-filtered search by meaning (`query`, `limit`) | Signed in |
+| `GET /api/v1/ingestion-jobs/{id}` | Processing status of an upload | Curator of the unit, or a reader of the document |
 | `POST /api/v1/documents` | Upload a PDF/DOCX (multipart `file` + `metadata` JSON); optional `Idempotency-Key` header for safe retries | Curator in the business unit |

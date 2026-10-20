@@ -13,10 +13,12 @@ from db.tenancy import TENANT_TABLES_CHILD_FIRST, delete_organisation_rows
 
 TEST_DATABASE = "lekha_test"
 TEST_BUCKET = "lekha-test"
+TEST_COLLECTION = "lekha_test_chunks"
 
 __all__ = [
     "TENANT_TABLES_CHILD_FIRST",
     "TEST_BUCKET",
+    "TEST_COLLECTION",
     "TEST_DATABASE",
     "delete_tenant",
     "run_alembic",

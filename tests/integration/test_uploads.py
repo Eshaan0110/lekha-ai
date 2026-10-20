@@ -132,7 +132,7 @@ async def test_curator_upload_is_stored_recorded_and_visible_to_its_guests(
         "size_bytes": len(PDF),
         "sha256": hashlib.sha256(PDF).hexdigest(),
     }
-    assert body["ingestion_job_id"] is None
+    assert uuid.UUID(body["ingestion_job_id"])  # a real job, handed to the worker
 
     # Stored under the organisation / business-unit prefix, nothing else.
     [key] = store.puts

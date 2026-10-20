@@ -582,6 +582,9 @@ go/no-go before Phase 2. Group OIDC and AWS deployment remain blocked on Phase 0
 
 **Phase 2 (2026-10-19):** owner GO for local development with **synthetic documents only**.
 The error envelope now matches the plan. The Phase 2 plan
-([`docs/design/phase-2-plan.md`](docs/design/phase-2-plan.md)) is **Proposed**; build nothing
-until the owner approves it and decides D1–D4. Commit rule: one commit per finished piece of
+([`docs/design/phase-2-plan.md`](docs/design/phase-2-plan.md)) is approved with the recommended
+D1–D4, and the prototype pipeline (worker, extraction, chunking, fake embedder, permission-
+tagged Qdrant index, guarded search) is built and tested. Next: versioning and deletion, the
+100-document synthetic corpus and red-team, then the Phase 2 report. BGE-M3 is downloaded
+only on the owner's explicit OK. Commit rule: one commit per finished piece of
 work, push only when the owner says.

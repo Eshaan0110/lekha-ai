@@ -60,10 +60,21 @@ Overall: **Build work complete; end-of-phase report written ([reports/phase-1-re
 
 ## Phase 2 — Document ingestion (local, synthetic data only)
 
-Owner GO on 2026-10-19 for local development with synthetic documents only. Before building:
-the error envelope now matches the plan exactly (done), and the Phase 2 plan is
-**Proposed**: [design/phase-2-plan.md](design/phase-2-plan.md), with four owner decisions
-(D1 extractor, D2 language detection, D3 BGE-M3 download and runtime, D4 synthetic corpus).
+Plan approved with the recommended decisions D1–D4 ([design/phase-2-plan.md](design/phase-2-plan.md)).
+**Prototype pipeline built and tested** (2026-10-20):
+
+| Item | Status | Evidence |
+|---|---|---|
+| Background jobs (ARQ worker, `ingestion_job`, per-stage status, retries) | Tested | `apps/worker/`, `GET /api/v1/ingestion-jobs/{id}`; live run with the real worker on the dev stack |
+| Extract (pypdf, python-docx), language by script, heading-aware chunks | Tested | `lekha/ingestion/`, `test_ingestion.py` |
+| Embeddings | Tested with the **fake** embedder only | `model_layer/`; BGE-M3 adapter refuses to load until the owner approves the ~2.3 GB download |
+| Qdrant index with permissions in every point | Tested | payload: tenant, BU, classification, `allowed_subjects`, current version |
+| Searches without permission filters rejected | Tested | `UnscopedSearchError`; `test_a_search_without_permission_filters_is_refused` |
+| Permission-filtered search (`POST /api/v1/search`) + database re-check | Tested | `test_upload_is_ingested_and_found_only_by_permitted_users`, `test_stale_index_is_caught_by_the_database_recheck` |
+| Document versioning in the index, deletion workflow | Not started | plan step 5 |
+| 100 synthetic documents, 50-question red-team | Not started | plan step 6 |
+
+Tests: 156 unit + 80 integration passing.
 
 ## Phases 3–7
 

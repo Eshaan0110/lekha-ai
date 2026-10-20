@@ -25,6 +25,9 @@ dependencies = [
     "structlog>=24.4,<26.0",
     "boto3>=1.35,<2.0",
     "python-multipart>=0.0.18,<1.0",
+    "arq>=0.26,<1.0",
+    "pypdf>=5.0,<7.0",
+    "python-docx>=1.1,<2.0",
 ]
 
 [dependency-groups]
@@ -44,7 +47,7 @@ requires = ["hatchling>=1.25,<2.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["lekha", "apps", "db"]
+packages = ["lekha", "apps", "db", "model_layer"]
 
 [tool.uv]
 # Supply-chain guard: never resolve packages published in the last ~2 weeks.
@@ -67,7 +70,7 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF", "N", "SIM", "PT"]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
-packages = ["lekha", "apps", "db", "tests"]
+packages = ["lekha", "apps", "db", "model_layer", "tests"]
 
 [[tool.mypy.overrides]]
 module = ["asyncpg.*"]  # asyncpg ships no type information
@@ -88,7 +91,7 @@ addopts = "-ra --strict-markers -m 'not integration'"
 filterwarnings = ["error"]
 
 [tool.importlinter]
-root_packages = ["lekha", "apps", "db"]
+root_packages = ["lekha", "apps", "db", "model_layer"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
@@ -114,3 +117,16 @@ name = "Upload validation and storage interface stay pure (no S3 SDK, DB or web 
 type = "forbidden"
 source_modules = ["lekha.memory.files", "lekha.memory.storage"]
 forbidden_modules = ["db", "apps", "sqlalchemy", "fastapi", "starlette", "boto3", "botocore"]
+
+[[tool.importlinter.contracts]]
+name = "Model layer depends on nothing in Lekha (CLAUDE.md 4.3)"
+type = "forbidden"
+source_modules = ["model_layer"]
+forbidden_modules = ["lekha", "apps", "db"]
+
+[[tool.importlinter.contracts]]
+name = "Ingestion and retrieval logic never import entry points or the database layer"
+type = "forbidden"
+source_modules = ["lekha.ingestion", "lekha.retrieval"]
+forbidden_modules = ["apps", "db", "sqlalchemy", "fastapi"]
+

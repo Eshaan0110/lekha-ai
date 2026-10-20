@@ -42,6 +42,7 @@ a recorded manual check proves it.
 | No orphaned files | Rejected uploads store nothing; a failed DB write deletes the stored object | `test_losing_a_race_removes_the_stored_file`, `test_storage_outage_fails_cleanly_with_no_rows` |
 | Verified backups | One folder per backup with SHA-256 of every file; written as `.partial` until complete; restore verifies everything first and changes nothing on any mismatch or path escape | `test_full_restore_drill`, `test_a_damaged_backup_is_refused_before_anything_changes`, `test_manifest_paths_cannot_escape_the_backup_folder` |
 | Safe retries | `Idempotency-Key`: a retried upload replays the original response instead of duplicating; keys are private to each user; reuse for a different request or while in progress is `409`; failed attempts free the key; concurrent claims admit exactly one | `test_idempotency.py` |
+| Permission-filtered search | Qdrant filter built only from AuthContext (tenant, BU, clearance, `allowed_subjects`, current version); searches without it are refused; every hit re-checked against the database rule | `test_ingestion_search.py`, `test_ingestion.py` |
 | Interactive API docs off outside local/test | `/docs` and `/openapi.json` disabled in staging/production | `test_interactive_docs_are_disabled_in_production` |
 
 ## Not yet implemented (Phase 1, later slices)

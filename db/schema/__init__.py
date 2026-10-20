@@ -17,17 +17,21 @@ from db.schema.identity import (
     Role,
     UserRoleGrant,
 )
+from db.schema.ingestion import ChunkRecord, IngestionJob, IngestionStatus
 
 __all__ = [
     "AppUser",
     "AuditEventRecord",
     "BusinessUnit",
+    "ChunkRecord",
     "Document",
     "DocumentAcl",
     "DocumentFile",
     "DocumentVersion",
     "IdempotencyRecord",
     "IdempotencyState",
+    "IngestionJob",
+    "IngestionStatus",
     "Organisation",
     "PermissionSubject",
     "Role",

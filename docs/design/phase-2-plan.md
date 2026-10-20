@@ -1,6 +1,10 @@
 # Phase 2 plan: document ingestion (proposal)
 
-- **Status:** Proposed, awaiting owner review. Nothing in this plan is built yet.
+- **Status:** Approved with the recommended D1–D4 (owner, 2026-10-20: "hurry up, at least a
+  prototype"). **Prototype built:** steps 1–4 below (worker, extraction, language, chunking,
+  fake embedder, Qdrant indexing with permissions, guarded search, job status). Still to do:
+  step 5 (versioning and deletion), step 6 (100-document corpus and red-team), the real
+  BGE-M3 download (needs owner OK), and the Phase 2 report.
 - **Date:** 2026-10-19
 - **Scope:** local, **synthetic documents only** (owner's GO of 2026-10-19). No real or confidential data.
 - **Sources:** primary plan §4 (Phase 2) and §5 (week 2); Technical Architecture §"Ingestion"
