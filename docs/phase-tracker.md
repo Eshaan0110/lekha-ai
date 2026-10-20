@@ -60,6 +60,8 @@ Overall: **Build work complete; end-of-phase report written ([reports/phase-1-re
 
 ## Phase 2 — Document ingestion (local, synthetic data only)
 
+Overall: **Build work complete; end-of-phase report written ([reports/phase-2-report.md](reports/phase-2-report.md)); awaiting owner go/no-go for Phase 3.** Embedding decision recorded as ADR-0012 (Proposed).
+
 Plan approved with the recommended decisions D1–D4 ([design/phase-2-plan.md](design/phase-2-plan.md)).
 **Prototype pipeline built and tested** (2026-10-20):
 

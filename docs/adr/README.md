@@ -17,5 +17,6 @@ and when we would revisit it. Statuses: **Proposed** (awaiting owner approval),
 | [0009](0009-document-upload.md) | Document upload: validation, authorisation and storage | Accepted (2026-10-19) |
 | [0010](0010-local-backup-and-restore.md) | Local backup and restore of all three data stores | Accepted (2026-10-19) |
 | [0011](0011-idempotency-keys.md) | Idempotency-Key for write endpoints | Accepted (2026-10-19) |
+| [0012](0012-embeddings-runtime.md) | Embedding models and how they run locally (BGE-M3 via ONNX Runtime) | Proposed |
 
 Template: copy any ADR and keep every heading.

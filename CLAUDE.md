@@ -589,5 +589,7 @@ tagged Qdrant index, guarded search) is built and tested, and so are versioning 
 embedder; the owner approved BGE-M3, which runs from its ONNX export (no PyTorch) once the
 slow download finishes. The 100-document corpus and 50-question red-team pass with 0
 anomalies (2026-10-21), with the fake embedder and with real BGE-M3 (downloaded and working
-on CPU). Next: the Phase 2 report, then stop for the owner's go/no-go. Commit rule: one commit per finished piece of
+on CPU). The Phase 2 report is written
+([`docs/reports/phase-2-report.md`](docs/reports/phase-2-report.md)); waiting for the owner's
+go/no-go before Phase 3, and acceptance of ADR-0012. Commit rule: one commit per finished piece of
 work, push only when the owner says.
