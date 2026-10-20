@@ -13,6 +13,7 @@ from lekha.retrieval import QdrantIndex
 from model_layer import BgeM3Embedder, Embedder, FakeEmbedder, MiniLmEmbedder
 
 INGEST_FUNCTION = "ingest"
+PURGE_FUNCTION = "purge"
 
 
 def build_embedder(settings: Settings) -> Embedder:
@@ -50,6 +51,8 @@ def redis_settings(settings: Settings) -> RedisSettings:
 class JobQueue(Protocol):
     async def enqueue_ingestion(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None: ...
 
+    async def enqueue_purge(self, organisation_id: uuid.UUID, request_id: uuid.UUID) -> None: ...
+
     async def close(self) -> None: ...
 
 
@@ -61,16 +64,30 @@ class ArqJobQueue:
         self._pool: ArqRedis | None = None
 
     async def enqueue_ingestion(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None:
-        if self._pool is None:
-            self._pool = await create_pool(redis_settings(self._settings))
+        pool = await self._get_pool()
         # The job ID doubles as ARQ's job ID, so enqueueing the same job twice is a no-op.
-        await self._pool.enqueue_job(
+        await pool.enqueue_job(
             INGEST_FUNCTION,
             str(organisation_id),
             str(job_id),
             _job_id=f"ingest:{job_id}",
             _queue_name=queue_name(self._settings),
         )
+
+    async def enqueue_purge(self, organisation_id: uuid.UUID, request_id: uuid.UUID) -> None:
+        pool = await self._get_pool()
+        await pool.enqueue_job(
+            PURGE_FUNCTION,
+            str(organisation_id),
+            str(request_id),
+            _job_id=f"purge:{request_id}",
+            _queue_name=queue_name(self._settings),
+        )
+
+    async def _get_pool(self) -> ArqRedis:
+        if self._pool is None:
+            self._pool = await create_pool(redis_settings(self._settings))
+        return self._pool
 
     async def close(self) -> None:
         if self._pool is not None:

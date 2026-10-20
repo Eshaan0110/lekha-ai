@@ -1,6 +1,7 @@
 """SQLAlchemy ORM mappings. The only package that defines persistence mappings."""
 
 from db.schema.audit import AuditEventRecord
+from db.schema.deletion import DeletionRequest, DeletionStatus
 from db.schema.documents import (
     Document,
     DocumentAcl,
@@ -24,6 +25,8 @@ __all__ = [
     "AuditEventRecord",
     "BusinessUnit",
     "ChunkRecord",
+    "DeletionRequest",
+    "DeletionStatus",
     "Document",
     "DocumentAcl",
     "DocumentFile",

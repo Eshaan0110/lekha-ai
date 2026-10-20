@@ -32,6 +32,7 @@ dependencies = [
     # avoiding PyTorch until BGE-M3 is approved (model_layer/minilm.py).
     "numpy>=2.4,<3.0",
     "tokenizers>=0.22,<1.0",
+    "onnxruntime>=1.20,<2.0",
 ]
 
 [dependency-groups]
@@ -77,7 +78,7 @@ plugins = ["pydantic.mypy"]
 packages = ["lekha", "apps", "db", "model_layer", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["asyncpg.*"]  # asyncpg ships no type information
+module = ["asyncpg.*", "onnxruntime.*"]  # these ship no type information
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

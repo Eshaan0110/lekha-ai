@@ -1,4 +1,5 @@
-"""The ingestion pipeline for one job: extract → chunk → embed → index (plan stages 4-11).
+"""The ingestion pipeline for one job: extract → chunk → embed → index → publish (plan
+stages 4-13). A new version becomes current only after its chunks are indexed.
 
 Runs inside the ARQ worker, and is called directly by tests. Every write is scoped to the
 job's organisation. Deterministic failures (an unreadable or empty file) mark the job
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from db.ingestion import (
     VersionToIngest,
     load_version_to_ingest,
+    publish_version,
     replace_chunks,
     update_job,
 )
@@ -44,8 +46,8 @@ class PipelineDeps:
     embedder: Embedder
 
 
-class TransientIngestionError(RuntimeError):
-    """A dependency was unavailable; the queue should retry this job."""
+class TransientJobError(RuntimeError):
+    """A dependency was unavailable; the queue should retry this job (ingestion or purge)."""
 
 
 async def run_ingestion(
@@ -71,6 +73,8 @@ async def run_ingestion(
             started_at=now,
         )
     structlog.contextvars.bind_contextvars(ingestion_job_id=str(job_id))
+    if target.deleted:
+        return await _finish(deps, target, IngestionStatus.FAILED, error_code="document_deleted")
     try:
         chunks = await _extract_and_chunk(deps, target)
         if not chunks:
@@ -85,7 +89,7 @@ async def run_ingestion(
         code = "storage_unavailable" if isinstance(exc, ObjectStoreError) else "index_unavailable"
         status = IngestionStatus.FAILED if final_attempt else IngestionStatus.QUEUED
         await _finish(deps, target, status, error_code=code)
-        raise TransientIngestionError(code) from None
+        raise TransientJobError(code) from None
     return await _finish(deps, target, IngestionStatus.SUCCEEDED, chunk_count=len(chunks))
 
 
@@ -123,6 +127,12 @@ async def _index(
     )
     async with tenant_transaction(deps.session_factory, target.organisation_id) as s:
         await replace_chunks(s, target, chunks, point_ids, embedding_model=deps.embedder.model_name)
+        published = await publish_version(s, target, now=datetime.now(UTC))
+    if published.current_version_id is None:
+        # Deleted while processing: its points must not linger (the purge may have run first).
+        await deps.index.delete_document(target.document_id)
+    else:
+        await deps.index.mark_current_version(target.document_id, published.current_version_id)
 
 
 def _payload(

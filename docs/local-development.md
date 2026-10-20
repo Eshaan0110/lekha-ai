@@ -113,6 +113,20 @@ Restart the API and worker, then re-upload documents (vectors from different mod
 a collection; the app refuses a mismatch). The weights file is checked against a pinned SHA-256.
 Kannada and Hindi need BGE-M3. Tests always use the fake embedder, whatever `.env` says.
 
+## BGE-M3 (multilingual, approved)
+
+About 2.3 GB, run with ONNX Runtime (no PyTorch). Download once (resumable; on slow links
+set `HF_HUB_DISABLE_XET=1` so progress is saved to disk):
+
+```
+uv run hf download BAAI/bge-m3 --include "onnx/*" --local-dir models/bge-m3
+```
+
+Then in `.env`: `LEKHA_EMBEDDER=bge-m3` and `LEKHA_QDRANT_COLLECTION=lekha_chunks_bge_m3`,
+restart, and re-upload. Files are checked against the repository's SHA-256 at startup.
+`LEKHA_EMBEDDER_DEVICE=cuda` uses the GPU only if a CUDA-enabled ONNX Runtime is installed;
+otherwise it runs on the CPU and logs a warning.
+
 ## Database accounts
 
 | Account | Used by | Can do |

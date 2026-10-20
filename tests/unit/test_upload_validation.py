@@ -15,6 +15,7 @@ from lekha.auth import (
     RoleGrant,
     UploadDenial,
     build_auth_context,
+    can_manage,
     upload_denial,
 )
 from lekha.memory import (
@@ -198,3 +199,23 @@ def test_upload_rule(
         allow_confidential=gate_open,
     )
     assert decision is expected
+
+
+@pytest.mark.parametrize(
+    ("grants", "bu", "classification", "expected"),
+    [
+        ([CURATOR_ALPHA], ALPHA, Classification.INTERNAL, True),
+        ([CURATOR_ALPHA], BETA, Classification.INTERNAL, False),  # another unit's curator
+        ([(ALPHA, "viewer", Classification.INTERNAL)], ALPHA, Classification.INTERNAL, False),
+        ([CURATOR_ALPHA], ALPHA, Classification.CONFIDENTIAL, False),  # above clearance
+        ([CURATOR_ALPHA, LEGAL_ALPHA], ALPHA, Classification.CONFIDENTIAL, True),
+        ([], ALPHA, Classification.PUBLIC, False),
+    ],
+)
+def test_who_may_change_or_delete_a_document(
+    grants: list[tuple[uuid.UUID, str, Classification]],
+    bu: uuid.UUID,
+    classification: Classification,
+    expected: bool,
+) -> None:
+    assert can_manage(_ctx(*grants), business_unit_id=bu, classification=classification) is expected

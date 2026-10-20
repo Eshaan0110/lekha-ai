@@ -1,4 +1,4 @@
-"""The small real embedder (all-MiniLM-L6-v2, numpy).
+"""The real embedders: all-MiniLM-L6-v2 (numpy) and BGE-M3 (ONNX Runtime).
 
 Tests that need the weights skip when ``models/all-MiniLM-L6-v2`` is absent (it is
 git-ignored); the maths helpers and the safety checks are always tested.
@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from model_layer import MiniLmEmbedder, ModelNotAvailableError
+from model_layer import BgeM3Embedder, MiniLmEmbedder, ModelNotAvailableError
 from model_layer.minilm import _gelu, _load_safetensors
 
 MODEL_DIR = Path(__file__).resolve().parents[2] / "models" / "all-MiniLM-L6-v2"
@@ -103,3 +103,41 @@ REFERENCE_START = [0.063614, 0.02965, 0.024876, 0.061648, 0.02859, 0.039088, -0.
 def test_matches_the_official_implementation(embedder: MiniLmEmbedder) -> None:
     [vector] = embedder.embed(["How many days of annual leave do employees get?"])
     assert np.allclose(vector[:8], REFERENCE_START, atol=1e-5)
+
+
+# --- BGE-M3 (ONNX) ---------------------------------------------------------------------
+
+
+def test_bge_m3_refuses_an_incomplete_download(tmp_path: Path) -> None:
+    (tmp_path / "onnx").mkdir()
+    (tmp_path / "onnx" / "model.onnx").write_bytes(b"graph only")
+    with pytest.raises(ModelNotAvailableError, match=r"model.onnx_data"):
+        BgeM3Embedder(tmp_path)
+
+
+def test_bge_m3_refuses_files_that_fail_their_checksum(tmp_path: Path) -> None:
+    onnx = tmp_path / "onnx"
+    onnx.mkdir()
+    for name in ("model.onnx", "model.onnx_data", "tokenizer.json"):
+        (onnx / name).write_bytes(b"tampered")
+    with pytest.raises(ModelNotAvailableError, match="checksum"):
+        BgeM3Embedder(tmp_path)
+
+
+BGE_DIR = MODEL_DIR.parent / "bge-m3"
+
+
+@pytest.mark.skipif(
+    not (BGE_DIR / "onnx" / "model.onnx_data").is_file(), reason="BGE-M3 not downloaded"
+)
+def test_bge_m3_matches_meaning_across_english_and_kannada() -> None:
+    embedder = BgeM3Embedder(BGE_DIR)
+    question_en, answer_kn, unrelated = embedder.embed(
+        [
+            "How many days of annual leave do employees get?",
+            "ನೌಕರರಿಗೆ ಪ್ರತಿ ವರ್ಷ ಇಪ್ಪತ್ತು ದಿನಗಳ ವಾರ್ಷಿಕ ರಜೆ ಸಿಗುತ್ತದೆ.",  # 20 days' annual leave
+            "Taxi fares are reimbursed for business travel.",
+        ]
+    )
+    assert len(question_en) == 1024
+    assert _cos(question_en, answer_kn) > _cos(question_en, unrelated)

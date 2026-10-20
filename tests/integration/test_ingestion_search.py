@@ -1,4 +1,5 @@
-"""End to end: upload → worker pipeline → permission-filtered search, on the real stack."""
+"""End to end on the real stack: upload → worker pipeline → permission-filtered search,
+new versions, and the deletion workflow."""
 
 from __future__ import annotations
 
@@ -16,11 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from apps.api.main import create_app
 from apps.scripts.seed_dev_data import SeedResult, seed_synthetic_organisation
 from apps.wiring import build_vector_index
-from apps.worker.pipeline import PipelineDeps, TransientIngestionError, run_ingestion
+from apps.worker.pipeline import PipelineDeps, TransientJobError, run_ingestion
+from apps.worker.purge import run_purge
 from db.engine import create_session_factory
-from db.schema import IngestionStatus
+from db.schema import DeletionStatus, IngestionStatus
 from lekha.auth import user_badge
 from lekha.core.config import AuthMode, Settings
+from lekha.memory import ObjectStoreError
 from lekha.memory.s3_store import S3ObjectStore
 from lekha.retrieval import QdrantIndex, UnscopedSearchError, VectorIndexError
 from model_layer import FakeEmbedder
@@ -40,6 +43,10 @@ POLICY = make_docx(
 class RecordingQueue:
     def __init__(self) -> None:
         self.jobs: list[tuple[uuid.UUID, uuid.UUID]] = []
+        self.purges: list[tuple[uuid.UUID, uuid.UUID]] = []
+
+    async def enqueue_purge(self, organisation_id: uuid.UUID, request_id: uuid.UUID) -> None:
+        self.purges.append((organisation_id, request_id))
 
     async def enqueue_ingestion(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None:
         self.jobs.append((organisation_id, job_id))
@@ -83,12 +90,22 @@ async def deps(settings: Settings, app_engine: AsyncEngine) -> AsyncIterator[Pip
     await index.close()
 
 
-def _upload(client: TestClient, org: SeedResult, name: str, data: bytes, acl: list[str]) -> Any:
+def _upload(
+    client: TestClient,
+    org: SeedResult,
+    name: str,
+    data: bytes,
+    acl: list[str],
+    *,
+    canonical_key: str | None = None,
+    classification: str = "internal",
+    expect: int = 201,
+) -> Any:
     metadata = {
         "title": "Synthetic leave policy",
-        "canonical_key": f"synthetic:{uuid.uuid4().hex[:8]}",
+        "canonical_key": canonical_key or f"synthetic:{uuid.uuid4().hex[:8]}",
         "business_unit_id": str(org.business_units["bu-alpha"]),
-        "classification": "internal",
+        "classification": classification,
         "acl_subjects": acl,
     }
     response = client.post(
@@ -97,7 +114,7 @@ def _upload(client: TestClient, org: SeedResult, name: str, data: bytes, acl: li
         files={"file": (name, data)},
         data={"metadata": json.dumps(metadata)},
     )
-    assert response.status_code == 201, response.text
+    assert response.status_code == expect, response.text
     return response.json()
 
 
@@ -217,10 +234,10 @@ async def test_an_outage_is_retried_and_only_the_last_attempt_fails(
         return body["status"], body["error_code"]
 
     try:
-        with pytest.raises(TransientIngestionError):
+        with pytest.raises(TransientJobError):
             await run_ingestion(broken, org.organisation_id, job_id, final_attempt=False)
         assert job_state() == ("queued", "index_unavailable")  # a retry is coming
-        with pytest.raises(TransientIngestionError):
+        with pytest.raises(TransientJobError):
             await run_ingestion(broken, org.organisation_id, job_id, final_attempt=True)
         assert job_state() == ("failed", "index_unavailable")
     finally:
@@ -240,3 +257,223 @@ async def test_parallel_workers_can_create_a_new_collection_together(settings: S
         await indexes[0]._client.delete(f"/collections/{fresh.qdrant_collection}")
         for index in indexes:
             await index.close()
+
+
+# --- versions -------------------------------------------------------------------------
+
+POLICY_V2 = make_docx(
+    [("Annual leave", ["From next year employees receive thirty days of annual leave."])]
+)
+POLICY_V3 = make_docx(
+    [("Annual leave", ["Employees receive thirty two days of annual leave from 2028."])]
+)
+
+
+async def _points(deps: PipelineDeps, **match: str) -> list[dict[str, Any]]:
+    """Payloads of the points matching every key=value (straight from the vector index)."""
+    response = await deps.index._client.post(
+        f"/collections/{deps.index._collection}/points/scroll",
+        json={
+            "filter": {"must": [{"key": k, "match": {"value": v}} for k, v in match.items()]},
+            "limit": 100,
+            "with_payload": True,
+        },
+    )
+    response.raise_for_status()
+    return [p["payload"] for p in response.json()["result"]["points"]]
+
+
+async def test_a_new_version_takes_over_only_once_it_is_indexed(
+    client: TestClient, org: SeedResult, deps: PipelineDeps, owner_engine: AsyncEngine
+) -> None:
+    asha = [user_badge(org.users["asha"])]
+    key = f"synthetic:{uuid.uuid4().hex[:8]}"
+    v1 = _upload(client, org, "policy.docx", POLICY, asha, canonical_key=key)
+    await run_ingestion(deps, org.organisation_id, uuid.UUID(v1["ingestion_job_id"]))
+
+    v2 = _upload(client, org, "policy-v2.docx", POLICY_V2, asha, canonical_key=key)
+    assert (v2["document_id"], v2["version_number"]) == (v1["document_id"], 2)
+    # Not processed yet: readers still get version 1.
+    assert {r["version_id"] for r in _search(client, "asha", "annual leave")} == {v1["version_id"]}
+
+    status = await run_ingestion(deps, org.organisation_id, uuid.UUID(v2["ingestion_job_id"]))
+    assert status is IngestionStatus.SUCCEEDED
+    assert {r["version_id"] for r in _search(client, "asha", "annual leave")} == {v2["version_id"]}
+    # The index itself was updated, not just filtered by the database re-check.
+    old = await _points(deps, document_version_id=v1["version_id"])
+    assert old  # kept: earlier versions stay addressable
+    assert not any(p["is_current_version"] for p in old)
+    new = await _points(deps, document_version_id=v2["version_id"])
+    assert all(p["is_current_version"] for p in new)
+    async with owner_engine.connect() as conn:
+        superseded_by = (
+            await conn.execute(
+                text("SELECT superseded_by_version_id FROM document_version WHERE id = :v"),
+                {"v": v1["version_id"]},
+            )
+        ).scalar_one()
+    assert str(superseded_by) == v2["version_id"]
+
+
+async def test_a_late_older_version_never_replaces_a_newer_one(
+    client: TestClient, org: SeedResult, deps: PipelineDeps
+) -> None:
+    asha = [user_badge(org.users["asha"])]
+    key = f"synthetic:{uuid.uuid4().hex[:8]}"
+    v1 = _upload(client, org, "a.docx", POLICY, asha, canonical_key=key)
+    await run_ingestion(deps, org.organisation_id, uuid.UUID(v1["ingestion_job_id"]))
+    v2 = _upload(client, org, "b.docx", POLICY_V2, asha, canonical_key=key)
+    v3 = _upload(client, org, "c.docx", POLICY_V3, asha, canonical_key=key)
+    await run_ingestion(deps, org.organisation_id, uuid.UUID(v3["ingestion_job_id"]))
+    await run_ingestion(deps, org.organisation_id, uuid.UUID(v2["ingestion_job_id"]))  # late
+
+    document = client.get(
+        f"/api/v1/documents/{v1['document_id']}", headers={"X-Dev-User": "dev|asha"}
+    ).json()
+    assert document["version_number"] == 3
+    assert {r["version_id"] for r in _search(client, "asha", "annual leave")} == {v3["version_id"]}
+    late = await _points(deps, document_version_id=v2["version_id"])
+    assert not any(p["is_current_version"] for p in late)
+
+
+def test_a_new_version_cannot_change_who_may_read_the_old_ones(
+    client: TestClient, org: SeedResult
+) -> None:
+    asha = [user_badge(org.users["asha"])]
+    key = f"synthetic:{uuid.uuid4().hex[:8]}"
+    _upload(client, org, "policy.docx", POLICY, asha, canonical_key=key)
+    refused = _upload(
+        client,
+        org,
+        "policy.docx",
+        POLICY,
+        asha,
+        canonical_key=key,
+        classification="public",
+        expect=409,
+    )
+    assert refused["error"]["code"] == "conflict"
+
+
+# --- deletion -------------------------------------------------------------------------
+
+
+def _delete(client: TestClient, user: str, document_id: str) -> Any:
+    return client.post(
+        "/api/v1/deletion-requests",
+        headers={"X-Dev-User": f"dev|{user}"},
+        json={"scope": "document", "document_id": document_id},
+    )
+
+
+async def test_deleting_a_document_hides_it_at_once_then_purges_everything(
+    client: TestClient,
+    org: SeedResult,
+    queue: RecordingQueue,
+    deps: PipelineDeps,
+    owner_engine: AsyncEngine,
+) -> None:
+    asha = [user_badge(org.users["asha"])]
+    key = f"synthetic:{uuid.uuid4().hex[:8]}"
+    uploaded = _upload(client, org, "policy.docx", POLICY, asha, canonical_key=key)
+    document_id = uploaded["document_id"]
+    await run_ingestion(deps, org.organisation_id, uuid.UUID(uploaded["ingestion_job_id"]))
+    assert _search(client, "asha", "annual leave")
+
+    assert _delete(client, "asha", document_id).status_code == 403  # reader, not curator
+    assert _delete(client, "ravi", document_id).status_code == 404  # can't even see it
+    response = _delete(client, "chitra", document_id)
+    assert response.status_code == 202, response.text
+    request_id = uuid.UUID(response.json()["id"])
+    assert response.json()["status"] == "pending"
+    assert queue.purges == [(org.organisation_id, request_id)]
+
+    # Hidden immediately, before the purge has run.
+    assert _search(client, "asha", "annual leave") == []
+    opened = client.get(f"/api/v1/documents/{document_id}", headers={"X-Dev-User": "dev|asha"})
+    assert opened.status_code == 404
+
+    assert await run_purge(deps, org.organisation_id, request_id) is DeletionStatus.COMPLETED
+    status = client.get(
+        f"/api/v1/deletion-requests/{request_id}", headers={"X-Dev-User": "dev|chitra"}
+    ).json()
+    assert status["status"] == "completed"
+    assert status["chunks_removed"] >= 2
+    assert status["files_removed"] == 1
+    hidden = client.get(
+        f"/api/v1/deletion-requests/{request_id}", headers={"X-Dev-User": "dev|asha"}
+    )
+    assert hidden.status_code == 404
+
+    # Derived data is gone; the tombstone and the audit trail remain.
+    assert await _points(deps, document_id=document_id) == []
+    params = {"d": document_id}
+    async with owner_engine.connect() as conn:
+        chunks = (
+            await conn.execute(
+                text(
+                    "SELECT count(*) FROM chunk c JOIN document_version v"
+                    " ON v.id = c.document_version_id WHERE v.document_id = :d"
+                ),
+                params,
+            )
+        ).scalar_one()
+        storage_key = (
+            await conn.execute(
+                text(
+                    "SELECT f.storage_key FROM document_file f JOIN document_version v"
+                    " ON v.file_id = f.id WHERE v.document_id = :d"
+                ),
+                params,
+            )
+        ).scalar_one()
+        deleted_at = (
+            await conn.execute(text("SELECT deleted_at FROM document WHERE id = :d"), params)
+        ).scalar_one()
+        audited = (
+            await conn.execute(
+                text(
+                    "SELECT count(*) FROM audit_event WHERE target_id = :d"
+                    " AND path = '/api/v1/deletion-requests' AND status_code = 202"
+                ),
+                params,
+            )
+        ).scalar_one()
+    assert chunks == 0
+    assert deleted_at is not None
+    assert audited == 1
+    with pytest.raises(ObjectStoreError):
+        await deps.store.get(storage_key)
+
+    # Gone for good: no second deletion, and the key can't bring it back.
+    assert _delete(client, "chitra", document_id).status_code == 404
+    _upload(client, org, "policy.docx", POLICY, asha, canonical_key=key, expect=409)
+
+
+async def test_a_purge_survives_an_outage(
+    client: TestClient, org: SeedResult, deps: PipelineDeps
+) -> None:
+    uploaded = _upload(client, org, "policy.docx", POLICY, [user_badge(org.users["asha"])])
+    await run_ingestion(deps, org.organisation_id, uuid.UUID(uploaded["ingestion_job_id"]))
+    request_id = uuid.UUID(_delete(client, "chitra", uploaded["document_id"]).json()["id"])
+    down = QdrantIndex.connect(
+        "http://127.0.0.1:9", "unused-key", "unused", FakeEmbedder.dimensions
+    )
+    broken = PipelineDeps(deps.session_factory, deps.store, down, deps.embedder)
+    try:
+        with pytest.raises(TransientJobError):
+            await run_purge(broken, org.organisation_id, request_id, final_attempt=False)
+    finally:
+        await down.close()
+    assert await run_purge(deps, org.organisation_id, request_id) is DeletionStatus.COMPLETED
+    assert await _points(deps, document_id=uploaded["document_id"]) == []
+
+
+async def test_a_document_deleted_before_processing_is_never_indexed(
+    client: TestClient, org: SeedResult, deps: PipelineDeps
+) -> None:
+    uploaded = _upload(client, org, "policy.docx", POLICY, [user_badge(org.users["asha"])])
+    assert _delete(client, "chitra", uploaded["document_id"]).status_code == 202
+    status = await run_ingestion(deps, org.organisation_id, uuid.UUID(uploaded["ingestion_job_id"]))
+    assert status is IngestionStatus.FAILED
+    assert await _points(deps, document_id=uploaded["document_id"]) == []

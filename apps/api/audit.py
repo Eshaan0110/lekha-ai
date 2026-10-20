@@ -19,7 +19,11 @@ logger = structlog.get_logger("lekha.audit")
 
 AUDITED_PREFIX = "/api/"
 # Path parameters that name an audit target, and the target type they name.
-_TARGET_PARAMS = {"document_id": "document", "job_id": "ingestion_job"}
+_TARGET_PARAMS = {
+    "document_id": "document",
+    "job_id": "ingestion_job",
+    "request_id": "deletion_request",
+}
 
 
 def _uuid_or_none(value: object) -> uuid.UUID | None:

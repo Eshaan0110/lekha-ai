@@ -5,6 +5,9 @@
   fake embedder, Qdrant indexing with permissions, guarded search, job status). Still to do:
   step 5 (versioning and deletion), step 6 (100-document corpus and red-team), the real
   BGE-M3 download (needs owner OK), and the Phase 2 report.
+- **Update 2026-10-20:** step 5 (versioning and deletion) built and tested. Owner approved
+  the BGE-M3 download; the official ONNX export (~2.3 GB) is used with ONNX Runtime instead
+  of PyTorch (saves ~2.5 GB). Download in progress on a slow connection.
 - **Update 2026-10-20 (owner):** Hindi deferred. Interim real embedder **all-MiniLM-L6-v2**
   (English only, 384 dimensions, CPU, ~90 MB, already on the laptop) via `LEKHA_EMBEDDER=minilm`
   until the BGE-M3 download is possible. Each embedding model uses its own Qdrant collection.

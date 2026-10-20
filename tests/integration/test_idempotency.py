@@ -123,7 +123,8 @@ async def test_a_retried_upload_replays_instead_of_duplicating(
 
 def test_without_a_key_a_retry_is_a_conflict(client: TestClient, org: SeedResult) -> None:
     assert _upload(client, org, None).status_code == 201
-    assert _upload(client, org, None).status_code == 409  # canonical_key already used
+    # Same key and an identical file: refused rather than stored as a duplicate version.
+    assert _upload(client, org, None).status_code == 409
 
 
 def test_reusing_a_key_for_a_different_request_is_refused(

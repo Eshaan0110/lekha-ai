@@ -3,9 +3,9 @@
 Must not depend on Lekha business modules (CLAUDE.md §4.3).
 """
 
+from model_layer.bge_m3 import BgeM3Embedder
 from model_layer.embeddings import (
     DIMENSIONS,
-    BgeM3Embedder,
     Embedder,
     FakeEmbedder,
     ModelNotAvailableError,

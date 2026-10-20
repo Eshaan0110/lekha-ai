@@ -1,4 +1,4 @@
-"""Writing newly uploaded documents. Callers run these inside ``tenant_transaction``."""
+"""Writing uploaded documents and new versions. Callers run these inside ``tenant_transaction``."""
 
 from __future__ import annotations
 
@@ -47,11 +47,52 @@ async def resolve_subject_ids(session: AsyncSession, keys: Sequence[str]) -> dic
     return {key: subject_id for key, subject_id in rows}
 
 
-async def canonical_key_taken(session: AsyncSession, canonical_key: str) -> bool:
-    found = await session.scalar(
-        select(Document.id).where(Document.canonical_key == canonical_key).limit(1)
+@dataclass(frozen=True, slots=True)
+class ExistingDocument:
+    document_id: uuid.UUID
+    business_unit_id: uuid.UUID
+    classification: Classification
+    deleted: bool
+    next_version_number: int
+    latest_sha256: bytes  # file checksum of the highest-numbered version
+
+
+async def lock_document_by_key(
+    session: AsyncSession, canonical_key: str
+) -> ExistingDocument | None:
+    """The document with this canonical key, locked until the transaction ends so two new
+    versions of it can't be numbered at the same time; None if the key is new."""
+    row = (
+        await session.execute(
+            select(
+                Document.id,
+                Document.business_unit_id,
+                Document.classification,
+                Document.deleted_at,
+            )
+            .where(Document.canonical_key == canonical_key)
+            .with_for_update()
+        )
+    ).first()
+    if row is None:
+        return None
+    latest = (
+        await session.execute(
+            select(DocumentVersion.version_number, DocumentFile.sha256)
+            .join(DocumentFile, DocumentFile.id == DocumentVersion.file_id)
+            .where(DocumentVersion.document_id == row.id)
+            .order_by(DocumentVersion.version_number.desc())
+            .limit(1)
+        )
+    ).one()
+    return ExistingDocument(
+        document_id=row.id,
+        business_unit_id=row.business_unit_id,
+        classification=row.classification,
+        deleted=row.deleted_at is not None,
+        next_version_number=latest.version_number + 1,
+        latest_sha256=latest.sha256,
     )
-    return found is not None
 
 
 async def upload_source_id(session: AsyncSession) -> uuid.UUID | None:
@@ -65,11 +106,10 @@ async def insert_uploaded_document(
     session: AsyncSession, new: NewDocument, *, source_system_id: uuid.UUID, now: datetime
 ) -> None:
     """Insert document, file, version 1 and its guest list, then mark version 1 current."""
-    org = new.organisation_id
     session.add(
         Document(
             id=new.document_id,
-            organisation_id=org,
+            organisation_id=new.organisation_id,
             business_unit_id=new.business_unit_id,
             source_system_id=source_system_id,
             canonical_key=new.canonical_key,
@@ -77,6 +117,29 @@ async def insert_uploaded_document(
             classification=new.classification,
         )
     )
+    await _insert_version(session, new, version_number=1, published_at=now)
+    await session.execute(
+        update(Document)
+        .where(Document.id == new.document_id)
+        .values(current_version_id=new.version_id)
+    )
+
+
+async def insert_new_version(
+    session: AsyncSession, new: NewDocument, *, version_number: int
+) -> None:
+    """Add a version to an existing document. It is not published: readers keep the current
+    version until the new one is indexed (plan: "publish" stage)."""
+    await _insert_version(session, new, version_number=version_number, published_at=None)
+    await session.execute(
+        update(Document).where(Document.id == new.document_id).values(title=new.title)
+    )
+
+
+async def _insert_version(
+    session: AsyncSession, new: NewDocument, *, version_number: int, published_at: datetime | None
+) -> None:
+    org = new.organisation_id
     session.add(
         DocumentFile(
             id=new.file_id,
@@ -95,9 +158,9 @@ async def insert_uploaded_document(
             id=new.version_id,
             organisation_id=org,
             document_id=new.document_id,
-            version_number=1,
+            version_number=version_number,
             file_id=new.file_id,
-            published_at=now,
+            published_at=published_at,
         )
     )
     await session.flush()
@@ -110,9 +173,4 @@ async def insert_uploaded_document(
             source=AclSource.EXPLICIT,
         )
         for subject_id in new.subject_ids
-    )
-    await session.execute(
-        update(Document)
-        .where(Document.id == new.document_id)
-        .values(current_version_id=new.version_id)
     )

@@ -115,18 +115,42 @@ class QdrantIndex:
         )
 
     async def delete_version(self, document_version_id: uuid.UUID) -> None:
-        selector = {
-            "filter": {
-                "must": [
-                    {"key": "document_version_id", "match": {"value": str(document_version_id)}}
-                ]
-            }
+        await self._delete_where(_match("document_version_id", document_version_id))
+
+    async def delete_document(self, document_id: uuid.UUID) -> None:
+        """Remove every point of every version of a document (deletion workflow)."""
+        await self._delete_where(_match("document_id", document_id))
+
+    async def mark_current_version(
+        self, document_id: uuid.UUID, current_version_id: uuid.UUID
+    ) -> None:
+        """Flag one version's points as current and every other version's as not.
+        Idempotent, so a retried job converges on the database's answer."""
+        others = {
+            "must": [_match("document_id", document_id)],
+            "must_not": [_match("document_version_id", current_version_id)],
         }
+        await self._set_payload(others, {"is_current_version": False})
+        await self._set_payload(
+            {"must": [_match("document_version_id", current_version_id)]},
+            {"is_current_version": True},
+        )
+
+    async def _set_payload(self, points_filter: dict[str, Any], payload: dict[str, Any]) -> None:
+        await self._ok(
+            self._client.post(
+                f"/collections/{self._collection}/points/payload",
+                params={"wait": "true"},
+                json={"payload": payload, "filter": points_filter},
+            )
+        )
+
+    async def _delete_where(self, condition: dict[str, Any]) -> None:
         await self._ok(
             self._client.post(
                 f"/collections/{self._collection}/points/delete",
                 params={"wait": "true"},
-                json=selector,
+                json={"filter": {"must": [condition]}},
             )
         )
 
@@ -165,6 +189,10 @@ class QdrantIndex:
         except httpx.HTTPError as exc:
             raise VectorIndexError(f"vector index request failed: {type(exc).__name__}") from None
         return response
+
+
+def _match(key: str, value: uuid.UUID) -> dict[str, Any]:
+    return {"key": key, "match": {"value": str(value)}}
 
 
 def _raise_for_status(response: httpx.Response) -> None:

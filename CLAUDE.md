@@ -584,8 +584,9 @@ go/no-go before Phase 2. Group OIDC and AWS deployment remain blocked on Phase 0
 The error envelope now matches the plan. The Phase 2 plan
 ([`docs/design/phase-2-plan.md`](docs/design/phase-2-plan.md)) is approved with the recommended
 D1–D4, and the prototype pipeline (worker, extraction, chunking, fake embedder, permission-
-tagged Qdrant index, guarded search) is built and tested. Next: versioning and deletion, the
-100-document synthetic corpus and red-team, then the Phase 2 report. BGE-M3 is downloaded
-only on the owner's explicit OK. 2026-10-20: Hindi deferred; all-MiniLM-L6-v2 (English-only,
-real) is the interim embedder until BGE-M3 can be downloaded. Commit rule: one commit per finished piece of
+tagged Qdrant index, guarded search) is built and tested, and so are versioning and deletion
+(step 5). 2026-10-20: Hindi deferred; all-MiniLM-L6-v2 (English-only, real) is the interim
+embedder; the owner approved BGE-M3, which runs from its ONNX export (no PyTorch) once the
+slow download finishes. Next: the 100-document synthetic corpus and red-team, then the
+Phase 2 report. Commit rule: one commit per finished piece of
 work, push only when the owner says.

@@ -1,11 +1,16 @@
-"""POST /api/v1/documents: upload a new document (multipart: ``file`` + ``metadata`` JSON).
+"""POST /api/v1/documents: upload a document (multipart: ``file`` + ``metadata`` JSON).
+
+A new ``canonical_key`` creates a document. A key that already exists adds a new version
+of that document (plan F-07); it must keep the document's business unit and
+classification, and becomes current only once the worker has indexed it.
 
 Order of checks, cheapest and safest first:
 1. Size from Content-Length, before the body is read.
 2. Metadata shape (Pydantic).
 3. File contents (type sniffing, size, structure): ``lekha.memory.validate_upload``.
 4. Permission to upload: ``lekha.auth.upload_denial`` (release gate, curator, clearance).
-5. Guest-list badges exist and the canonical key is free.
+5. Guest-list badges exist; an existing canonical key belongs to a live document with the
+   same business unit and classification.
 6. Store the bytes, then write the database rows in the same tenant transaction. If the
    database write fails, the stored object is deleted again.
 """
@@ -29,9 +34,11 @@ from apps.api.auth import CurrentUser, require_auth_context
 from apps.api.idempotency import fingerprint, idempotency_key, response_for_claim
 from apps.wiring import JobQueue
 from db.documents import (
+    ExistingDocument,
     NewDocument,
-    canonical_key_taken,
+    insert_new_version,
     insert_uploaded_document,
+    lock_document_by_key,
     resolve_subject_ids,
     upload_source_id,
 )
@@ -134,8 +141,9 @@ def _parse_metadata(raw: object) -> UploadMetadata:
         403: {"description": "Not allowed to upload here, or blocked by the release gate"},
         400: {"description": "Malformed Idempotency-Key header"},
         409: {
-            "description": "canonical_key already used, or Idempotency-Key reused for a "
-            "different request or still in progress"
+            "description": "canonical_key belongs to a deleted document or to one in another "
+            "business unit or classification; a concurrent upload; or Idempotency-Key reused "
+            "for a different request or still in progress"
         },
         411: {"description": "Content-Length header missing"},
         413: {"description": "File too large"},
@@ -238,16 +246,8 @@ async def _create_document(
 ) -> UploadResult:
     """Store the bytes, then write the rows; delete the stored object if the rows fail."""
     document_id, version_id, file_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    key = object_key(
-        organisation_id=ctx.organisation_id,
-        business_unit_id=metadata.business_unit_id,
-        document_id=document_id,
-        version_number=1,
-        file_id=file_id,
-        kind=validated.kind,
-    )
     store: ObjectStore = request.app.state.object_store
-    stored = False
+    key: str | None = None
     try:
         async with tenant_transaction(request.app.state.session_factory, ctx.organisation_id) as s:
             subjects = await resolve_subject_ids(s, metadata.acl_subjects)
@@ -257,20 +257,31 @@ async def _create_document(
                     status_code=422,
                     detail=f"{len(unknown)} access-list subject(s) do not exist.",
                 )
-            if await canonical_key_taken(s, metadata.canonical_key):
-                raise HTTPException(status_code=409, detail="That canonical_key is already used.")
+            existing = await lock_document_by_key(s, metadata.canonical_key)
+            version_number = 1
+            if existing is not None:
+                _check_new_version_allowed(existing, metadata, validated)
+                document_id, version_number = existing.document_id, existing.next_version_number
             source_id = await upload_source_id(s)
             if source_id is None:
                 logger.error("upload_source_system_missing")
                 raise HTTPException(status_code=503, detail="Uploads are not configured.")
+            key = object_key(
+                organisation_id=ctx.organisation_id,
+                business_unit_id=metadata.business_unit_id,
+                document_id=document_id,
+                version_number=version_number,
+                file_id=file_id,
+                kind=validated.kind,
+            )
             try:
                 await store.put(key, data, media_type=validated.media_type, sha256=validated.sha256)
             except ObjectStoreError:
+                key = None  # nothing was stored
                 logger.exception("object_store_put_failed")
                 raise HTTPException(
                     status_code=503, detail="File storage is unavailable."
                 ) from None
-            stored = True
             new = NewDocument(
                 document_id=document_id,
                 version_id=version_id,
@@ -284,22 +295,27 @@ async def _create_document(
                 file=validated,
                 subject_ids=sorted(set(subjects.values())),
             )
-            await insert_uploaded_document(
-                s, new, source_system_id=source_id, now=datetime.now(UTC)
-            )
+            if existing is None:
+                await insert_uploaded_document(
+                    s, new, source_system_id=source_id, now=datetime.now(UTC)
+                )
+            else:
+                await insert_new_version(s, new, version_number=version_number)
             job_id = await create_job(s, ctx.organisation_id, version_id)
     except IntegrityError:
         # Typically a concurrent upload with the same canonical_key won the race.
-        await _remove_orphan(store, key, stored)
-        raise HTTPException(status_code=409, detail="That canonical_key is already used.") from None
+        await _remove_orphan(store, key)
+        raise HTTPException(
+            status_code=409, detail="A conflicting upload happened at the same time; try again."
+        ) from None
     except BaseException:
-        await _remove_orphan(store, key, stored)
+        await _remove_orphan(store, key)
         raise
 
     return UploadResult(
         document_id=document_id,
         version_id=version_id,
-        version_number=1,
+        version_number=version_number,
         ingestion_job_id=job_id,
         file=StoredFile(
             filename=validated.filename,
@@ -310,9 +326,33 @@ async def _create_document(
     )
 
 
-async def _remove_orphan(store: ObjectStore, key: str, stored: bool) -> None:
+def _check_new_version_allowed(
+    existing: ExistingDocument, metadata: UploadMetadata, validated: ValidatedFile
+) -> None:
+    """A new version may not revive a deleted document or move it to another unit or
+    classification (that would silently change who can read the earlier versions), and must
+    differ from the latest version (so a blind retry doesn't add a duplicate)."""
+    if existing.deleted:
+        raise HTTPException(
+            status_code=409, detail="That canonical_key belongs to a deleted document."
+        )
+    if (existing.business_unit_id, existing.classification) != (
+        metadata.business_unit_id,
+        metadata.classification,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="A new version must keep the document's business unit and classification.",
+        )
+    if validated.sha256 == existing.latest_sha256:
+        raise HTTPException(
+            status_code=409, detail="This file is identical to the document's latest version."
+        )
+
+
+async def _remove_orphan(store: ObjectStore, key: str | None) -> None:
     """Delete a stored object whose database rows were not written."""
-    if not stored:
+    if key is None:
         return
     try:
         await store.delete(key)

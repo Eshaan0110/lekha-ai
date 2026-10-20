@@ -42,6 +42,7 @@ class VersionToIngest:
     kind: FileKind
     allowed_subjects: tuple[str, ...]  # badge keys with an unexpired read entry, right now
     is_current: bool
+    deleted: bool
 
 
 async def create_job(
@@ -73,6 +74,7 @@ async def load_version_to_ingest(
                 DocumentFile.storage_key,
                 DocumentFile.media_type,
                 Document.current_version_id,
+                Document.deleted_at,
             )
             .join(DocumentVersion, DocumentVersion.id == IngestionJob.document_version_id)
             .join(Document, Document.id == DocumentVersion.document_id)
@@ -82,7 +84,7 @@ async def load_version_to_ingest(
     ).first()
     if row is None:
         return None
-    org, bu, doc_id, version_id, classification, key, media_type, current = row
+    org, bu, doc_id, version_id, classification, key, media_type, current, deleted_at = row
     subjects = (
         await session.execute(
             select(PermissionSubject.key)
@@ -105,6 +107,7 @@ async def load_version_to_ingest(
         kind=_KIND_BY_MEDIA_TYPE[media_type],
         allowed_subjects=tuple(sorted(set(subjects))),
         is_current=current == version_id,
+        deleted=deleted_at is not None,
     )
 
 
@@ -205,3 +208,64 @@ async def visible_job(
         )
     ).scalar_one_or_none()
     return job
+
+
+@dataclass(frozen=True, slots=True)
+class PublishResult:
+    current_version_id: uuid.UUID | None  # None: the document was deleted meanwhile
+    published: bool  # did this version become (or stay) current?
+
+
+async def publish_version(
+    session: AsyncSession, target: VersionToIngest, *, now: datetime
+) -> PublishResult:
+    """Plan stage 13: make an indexed version current, superseding the previous one.
+
+    The document row is locked, so two versions finishing together are ordered. A version
+    older than the current one (it finished late) is recorded as superseded instead, and
+    nothing is published for a document deleted while its version was being processed.
+    """
+    doc = (
+        await session.execute(
+            select(Document.current_version_id, Document.deleted_at)
+            .where(Document.id == target.document_id)
+            .with_for_update()
+        )
+    ).one()
+    if doc.deleted_at is not None:
+        return PublishResult(current_version_id=None, published=False)
+    if doc.current_version_id == target.version_id:
+        return PublishResult(current_version_id=target.version_id, published=True)
+
+    rows = await session.execute(
+        select(DocumentVersion.id, DocumentVersion.version_number).where(
+            DocumentVersion.id.in_([target.version_id, doc.current_version_id])
+        )
+    )
+    numbers = {version_id: number for version_id, number in rows}
+    current = doc.current_version_id
+    if current is not None and numbers[current] > numbers[target.version_id]:
+        await session.execute(
+            update(DocumentVersion)
+            .where(DocumentVersion.id == target.version_id)
+            .values(superseded_at=now, superseded_by_version_id=current)
+        )
+        return PublishResult(current_version_id=current, published=False)
+
+    await session.execute(
+        update(DocumentVersion)
+        .where(DocumentVersion.id == target.version_id)
+        .values(published_at=now)
+    )
+    if current is not None:
+        await session.execute(
+            update(DocumentVersion)
+            .where(DocumentVersion.id == current)
+            .values(superseded_at=now, superseded_by_version_id=target.version_id)
+        )
+    await session.execute(
+        update(Document)
+        .where(Document.id == target.document_id)
+        .values(current_version_id=target.version_id)
+    )
+    return PublishResult(current_version_id=target.version_id, published=True)

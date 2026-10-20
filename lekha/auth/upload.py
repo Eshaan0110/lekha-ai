@@ -35,3 +35,14 @@ def upload_denial(
     if clearance is None or not classification.within(clearance):
         return UploadDenial.ABOVE_CLEARANCE
     return None
+
+
+def can_manage(
+    ctx: AuthContext, *, business_unit_id: uuid.UUID, classification: Classification
+) -> bool:
+    """May this caller change or delete a document? Curators of its business unit, cleared
+    for its classification: the same people who may upload it."""
+    if CURATOR_ROLE not in ctx.roles_by_bu.get(business_unit_id, frozenset()):
+        return False
+    clearance = ctx.clearance_by_bu.get(business_unit_id)
+    return clearance is not None and classification.within(clearance)
