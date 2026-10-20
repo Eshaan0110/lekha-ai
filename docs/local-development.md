@@ -85,6 +85,7 @@ curl -H "X-Dev-User: dev|asha" http://127.0.0.1:8000/api/v1/documents
 | `dev|meera` | Alpha leave policy, Alpha legal memo, Alpha travel policy |
 | `dev|ravi` | Beta leave policy |
 | `dev|chitra` | nothing yet, but may **upload** to alpha (curator) |
+| `dev|bina` | nothing yet, but may **upload** to beta (curator) |
 | `dev|kiran`, `dev|nobody` | nothing |
 | `dev|inactive` | cannot sign in (401) |
 

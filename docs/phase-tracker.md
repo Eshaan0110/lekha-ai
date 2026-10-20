@@ -73,9 +73,9 @@ Plan approved with the recommended decisions D1–D4 ([design/phase-2-plan.md](d
 | Permission-filtered search (`POST /api/v1/search`) + database re-check | Tested | `test_upload_is_ingested_and_found_only_by_permitted_users`, `test_stale_index_is_caught_by_the_database_recheck` |
 | Document versioning | Tested | Same `canonical_key` adds a version; it becomes current only after indexing (publish stage); a late older version never replaces a newer one; identical re-uploads and unit/classification changes refused (409); old points kept but flagged not-current in Qdrant |
 | Deletion workflow (`POST /api/v1/deletion-requests`) | Tested | Curators only; document hidden at once (soft delete + `deletion_request`, migration 0006); worker purges vectors, chunks and files and records counts; audited; retries on outage; a document deleted mid-ingestion is never indexed. Retention window not applied yet (no retention policy from Phase 0) |
-| 100 synthetic documents, 50-question red-team | Not started | plan step 6 |
+| 100 synthetic documents, 50-question red-team | Tested | `test_100_documents_and_a_50_question_red_team_with_zero_anomalies`: 100 synthetic docs (English PDF/DOCX + Kannada DOCX, 11 sharing patterns incl. confidential, expired shares, deleted, mis-tagged, prompt-injection text) all ingested; 50 queries × 7 users = 350 searches, **0 anomalies** against a hand-written answer key; every reader finds every document they may read. Run with the fake embedder; repeat with BGE-M3 once downloaded |
 
-Tests: 172 unit (+1 skipped until BGE-M3 is downloaded) + 89 integration passing.
+Tests: 172 unit (+1 skipped until BGE-M3 is downloaded) + 90 integration passing.
 
 Owner decisions (2026-10-20): **Hindi is deferred** (script detection stays; Hindi leaves the
 corpus and acceptance for now). Use **all-MiniLM-L6-v2** as the real embedder until BGE-M3 can

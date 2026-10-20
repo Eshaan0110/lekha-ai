@@ -587,6 +587,6 @@ D1–D4, and the prototype pipeline (worker, extraction, chunking, fake embedder
 tagged Qdrant index, guarded search) is built and tested, and so are versioning and deletion
 (step 5). 2026-10-20: Hindi deferred; all-MiniLM-L6-v2 (English-only, real) is the interim
 embedder; the owner approved BGE-M3, which runs from its ONNX export (no PyTorch) once the
-slow download finishes. Next: the 100-document synthetic corpus and red-team, then the
-Phase 2 report. Commit rule: one commit per finished piece of
+slow download finishes. The 100-document corpus and 50-question red-team pass with 0
+anomalies (2026-10-21). Next: switch to BGE-M3 when downloaded, then the Phase 2 report. Commit rule: one commit per finished piece of
 work, push only when the owner says.

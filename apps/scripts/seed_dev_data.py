@@ -11,6 +11,7 @@ must allow and a case that must deny.
 | dev|meera      | viewer + legal @ alpha             | A1, A2, A5    |
 | dev|ravi       | viewer @ beta                      | B1            |
 | dev|chitra     | curator @ alpha (may upload)       | nothing       |
+| dev|bina       | curator @ beta (may upload)        | nothing       |
 | dev|kiran      | viewer @ alpha, grant EXPIRED      | nothing       |
 | dev|nobody     | none                               | nothing       |
 | dev|inactive   | viewer @ alpha, account inactive   | cannot sign in|
@@ -69,6 +70,8 @@ class SeedResult:
     business_units: dict[str, uuid.UUID] = field(default_factory=dict)
     users: dict[str, uuid.UUID] = field(default_factory=dict)
     documents: dict[str, uuid.UUID] = field(default_factory=dict)
+    # "viewer@bu-alpha" -> role badge key, for building guest lists in tests and demos
+    role_badges: dict[str, str] = field(default_factory=dict)
 
 
 class _Seeder:
@@ -142,6 +145,7 @@ class _Seeder:
                     business_unit_id=bu_id,
                 )
             )
+        self.result.role_badges[f"{role}@{bu}"] = key
         return key
 
     async def document(
@@ -237,7 +241,7 @@ async def seed_synthetic_organisation(
     sd.add(
         SourceSystem(id=sd.source_id, organisation_id=organisation_id, code="upload", name="Upload")
     )
-    for name in ("asha", "meera", "ravi", "chitra", "kiran", "nobody"):
+    for name in ("asha", "meera", "ravi", "chitra", "bina", "kiran", "nobody"):
         sd.user(name)
     sd.user("inactive", active=False)
     await session.flush()
@@ -248,10 +252,13 @@ async def seed_synthetic_organisation(
     sd.grant("ravi", "viewer", "bu-beta")
     sd.grant("kiran", "viewer", "bu-alpha", expired=True)
     sd.grant("chitra", "curator", "bu-alpha")
+    sd.grant("bina", "curator", "bu-beta")
     sd.grant("inactive", "viewer", "bu-alpha")
     alpha_viewer = sd.role_badge("viewer", "bu-alpha")
     alpha_legal = sd.role_badge("legal", "bu-alpha")
     beta_viewer = sd.role_badge("viewer", "bu-beta")
+    sd.role_badge("curator", "bu-alpha")
+    sd.role_badge("curator", "bu-beta")
     await session.flush()
 
     yesterday = sd.now - timedelta(days=1)
