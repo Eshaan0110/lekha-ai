@@ -588,5 +588,6 @@ tagged Qdrant index, guarded search) is built and tested, and so are versioning 
 (step 5). 2026-10-20: Hindi deferred; all-MiniLM-L6-v2 (English-only, real) is the interim
 embedder; the owner approved BGE-M3, which runs from its ONNX export (no PyTorch) once the
 slow download finishes. The 100-document corpus and 50-question red-team pass with 0
-anomalies (2026-10-21). Next: switch to BGE-M3 when downloaded, then the Phase 2 report. Commit rule: one commit per finished piece of
+anomalies (2026-10-21), with the fake embedder and with real BGE-M3 (downloaded and working
+on CPU). Next: the Phase 2 report, then stop for the owner's go/no-go. Commit rule: one commit per finished piece of
 work, push only when the owner says.

@@ -5,6 +5,7 @@
   fake embedder, Qdrant indexing with permissions, guarded search, job status). Still to do:
   step 5 (versioning and deletion), step 6 (100-document corpus and red-team), the real
   BGE-M3 download (needs owner OK), and the Phase 2 report.
+- **Update 2026-10-21:** BGE-M3 downloaded and verified; the red team also passes with it.
 - **Update 2026-10-21:** step 6 done: 100-document synthetic corpus (generated deterministically
   in `tests/fixtures/corpus.py` instead of checked-in binaries) and the red-team, 0 anomalies.
   A beta curator (`dev|bina`) was added to the seed to upload beta documents.

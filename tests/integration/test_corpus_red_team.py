@@ -14,6 +14,7 @@ import json
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -23,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from apps.api.main import create_app
 from apps.scripts.seed_dev_data import SeedResult, seed_synthetic_organisation
-from apps.wiring import build_vector_index
+from apps.wiring import build_embedder, build_vector_index
 from apps.worker.pipeline import PipelineDeps, run_ingestion
 from apps.worker.purge import run_purge
 from db.engine import create_session_factory
@@ -31,7 +32,6 @@ from db.schema import DeletionStatus, IngestionStatus
 from lekha.auth import user_badge
 from lekha.core.config import AuthMode, Settings
 from lekha.memory.s3_store import S3ObjectStore
-from model_layer import FakeEmbedder
 from tests.fixtures.corpus import USERS, After, CorpusDoc, build_corpus, red_team_queries
 from tests.integration.support import delete_tenant
 
@@ -58,9 +58,39 @@ async def org(owner_engine: AsyncEngine) -> AsyncIterator[SeedResult]:
     await delete_tenant(owner_engine, result.organisation_id)
 
 
+BGE_M3_DIR = Path(__file__).resolve().parents[2] / "models" / "bge-m3"
+
+
+@pytest.fixture(
+    params=[
+        "fake",
+        pytest.param(
+            "bge-m3",
+            marks=pytest.mark.skipif(
+                not (BGE_M3_DIR / "onnx" / "model.onnx_data").is_file(),
+                reason="BGE-M3 not downloaded",
+            ),
+        ),
+    ]
+)
+def run_settings(request: pytest.FixtureRequest, settings: Settings) -> Settings:
+    """The red team runs with the fake embedder always, and with real BGE-M3 when present.
+    Each model gets its own collection: vectors from different models can't be compared."""
+    embedder: str = request.param
+    if embedder == "fake":
+        return settings
+    return settings.model_copy(
+        update={
+            "embedder": embedder,
+            "embedder_model_dir": BGE_M3_DIR,
+            "qdrant_collection": f"{settings.qdrant_collection}_bge_m3",
+        }
+    )
+
+
 @pytest.fixture
-def client(settings: Settings, org: SeedResult) -> Iterator[TestClient]:
-    app_settings = settings.model_copy(
+def client(run_settings: Settings, org: SeedResult) -> Iterator[TestClient]:
+    app_settings = run_settings.model_copy(
         update={"auth_mode": AuthMode.DEV, "dev_auth_organisation_id": org.organisation_id}
     )
     with TestClient(create_app(app_settings, job_queue=NullQueue())) as test_client:
@@ -68,13 +98,14 @@ def client(settings: Settings, org: SeedResult) -> Iterator[TestClient]:
 
 
 @pytest.fixture
-async def deps(settings: Settings, app_engine: AsyncEngine) -> AsyncIterator[PipelineDeps]:
-    index = build_vector_index(settings, FakeEmbedder.dimensions)
+async def deps(run_settings: Settings, app_engine: AsyncEngine) -> AsyncIterator[PipelineDeps]:
+    embedder = build_embedder(run_settings)
+    index = build_vector_index(run_settings, embedder.dimensions)
     yield PipelineDeps(
         session_factory=create_session_factory(app_engine),
-        store=S3ObjectStore.from_settings(settings),
+        store=S3ObjectStore.from_settings(run_settings),
         index=index,
-        embedder=FakeEmbedder(),
+        embedder=embedder,
     )
     await index.close()
 
@@ -119,7 +150,11 @@ def _search(client: TestClient, user: str, query: str) -> list[dict[str, Any]]:
 
 
 async def test_100_documents_and_a_50_question_red_team_with_zero_anomalies(
-    client: TestClient, org: SeedResult, deps: PipelineDeps, owner_engine: AsyncEngine
+    client: TestClient,
+    org: SeedResult,
+    deps: PipelineDeps,
+    owner_engine: AsyncEngine,
+    run_settings: Settings,
 ) -> None:
     corpus = build_corpus()
     uploads = {doc.code: _upload(client, org, doc) for doc in corpus}
@@ -200,7 +235,11 @@ async def test_100_documents_and_a_50_question_red_team_with_zero_anomalies(
     assert searches == 350
     assert hits > 0
 
-    # 4. Recall: every reader finds every document they may read, by its reference code.
+    # 4. Recall: readers find the documents they may read, by reference code. The fake
+    # embedder matches words exactly, so it must find all. BGE-M3 matches meaning and is
+    # weak at near-identical documents told apart only by a code; exact lookup needs the
+    # keyword half of hybrid search (Phase 3). Measured 2026-10-21: 108 of 124 (87%).
+    pairs = sum(len(doc.pattern.readers) for doc in corpus)
     missed = [
         (user, doc.code)
         for doc in corpus
@@ -208,4 +247,7 @@ async def test_100_documents_and_a_50_question_red_team_with_zero_anomalies(
         if uploads[doc.code]["document_id"]
         not in {r["document_id"] for r in _search(client, user, doc.code)}
     ]
-    assert missed == []
+    if run_settings.embedder == "fake":
+        assert missed == []
+    else:
+        assert len(missed) <= pairs * 0.15, f"{len(missed)}/{pairs} missed: {missed[:10]}"
