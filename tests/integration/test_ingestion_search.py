@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator, Iterator
@@ -15,13 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from apps.api.main import create_app
 from apps.scripts.seed_dev_data import SeedResult, seed_synthetic_organisation
 from apps.wiring import build_vector_index
-from apps.worker.pipeline import PipelineDeps, run_ingestion
+from apps.worker.pipeline import PipelineDeps, TransientIngestionError, run_ingestion
 from db.engine import create_session_factory
 from db.schema import IngestionStatus
 from lekha.auth import user_badge
 from lekha.core.config import AuthMode, Settings
 from lekha.memory.s3_store import S3ObjectStore
-from lekha.retrieval import UnscopedSearchError
+from lekha.retrieval import QdrantIndex, UnscopedSearchError, VectorIndexError
 from model_layer import FakeEmbedder
 from tests.fixtures.synthetic_docs import make_docx, make_image_only_pdf
 from tests.integration.support import delete_tenant
@@ -72,7 +73,7 @@ def client(settings: Settings, org: SeedResult, queue: RecordingQueue) -> Iterat
 
 @pytest.fixture
 async def deps(settings: Settings, app_engine: AsyncEngine) -> AsyncIterator[PipelineDeps]:
-    index = build_vector_index(settings)
+    index = build_vector_index(settings, FakeEmbedder.dimensions)
     yield PipelineDeps(
         session_factory=create_session_factory(app_engine),
         store=S3ObjectStore.from_settings(settings),
@@ -175,6 +176,18 @@ async def test_a_search_without_permission_filters_is_refused(deps: PipelineDeps
         await deps.index.search([0.0] * 1024, {"must": []}, limit=5)
 
 
+async def test_vectors_from_another_model_are_never_mixed_in(
+    settings: Settings, deps: PipelineDeps
+) -> None:
+    await deps.index.ensure_collection()  # the test collection holds fake (1024) vectors
+    other_model = build_vector_index(settings, dimensions=384)
+    try:
+        with pytest.raises(VectorIndexError, match="separate collection"):
+            await other_model.ensure_collection()
+    finally:
+        await other_model.close()
+
+
 async def test_a_file_without_text_fails_cleanly(
     client: TestClient, org: SeedResult, deps: PipelineDeps
 ) -> None:
@@ -185,3 +198,45 @@ async def test_a_file_without_text_fails_cleanly(
     assert await run_ingestion(deps, org.organisation_id, job_id) is IngestionStatus.FAILED
     job = client.get(f"/api/v1/ingestion-jobs/{job_id}", headers={"X-Dev-User": "dev|chitra"})
     assert (job.json()["status"], job.json()["error_code"]) == ("failed", "no_text_layer")
+
+
+async def test_an_outage_is_retried_and_only_the_last_attempt_fails(
+    client: TestClient, org: SeedResult, deps: PipelineDeps
+) -> None:
+    uploaded = _upload(client, org, "policy.docx", POLICY, [user_badge(org.users["asha"])])
+    job_id = uuid.UUID(uploaded["ingestion_job_id"])
+    down = QdrantIndex.connect(
+        "http://127.0.0.1:9", "unused-key", "unused", FakeEmbedder.dimensions
+    )
+    broken = PipelineDeps(deps.session_factory, deps.store, down, deps.embedder)
+
+    def job_state() -> tuple[str, str | None]:
+        body = client.get(
+            f"/api/v1/ingestion-jobs/{job_id}", headers={"X-Dev-User": "dev|chitra"}
+        ).json()
+        return body["status"], body["error_code"]
+
+    try:
+        with pytest.raises(TransientIngestionError):
+            await run_ingestion(broken, org.organisation_id, job_id, final_attempt=False)
+        assert job_state() == ("queued", "index_unavailable")  # a retry is coming
+        with pytest.raises(TransientIngestionError):
+            await run_ingestion(broken, org.organisation_id, job_id, final_attempt=True)
+        assert job_state() == ("failed", "index_unavailable")
+    finally:
+        await down.close()
+    # Once the index is back, the same job succeeds.
+    assert await run_ingestion(deps, org.organisation_id, job_id) is IngestionStatus.SUCCEEDED
+
+
+async def test_parallel_workers_can_create_a_new_collection_together(settings: Settings) -> None:
+    fresh = settings.model_copy(
+        update={"qdrant_collection": f"lekha_test_race_{uuid.uuid4().hex[:8]}"}
+    )
+    indexes = [build_vector_index(fresh, FakeEmbedder.dimensions) for _ in range(4)]
+    try:
+        await asyncio.gather(*(index.ensure_collection() for index in indexes))
+    finally:
+        await indexes[0]._client.delete(f"/collections/{fresh.qdrant_collection}")
+        for index in indexes:
+            await index.close()

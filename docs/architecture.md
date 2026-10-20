@@ -35,7 +35,7 @@ apps/api/search.py   POST /api/v1/search, GET /api/v1/ingestion-jobs/{id}
 apps/worker/         ARQ worker and the ingestion pipeline (extract → chunk → embed → index)
 lekha/ingestion/     Text extraction, language by script, heading-aware chunking (pure)
 lekha/retrieval/     Permission filter from AuthContext; Qdrant adapter with the unscoped-search guard
-model_layer/         Embedder interface; fake embedder (simulation); BGE-M3 adapter (gated)
+model_layer/         Embedder interface; fake embedder (simulation); all-MiniLM-L6-v2 (real, English, numpy); BGE-M3 adapter (gated)
 apps/api/idempotency.py, db/idempotency.py  Idempotency-Key: claim, replay, complete, release
 apps/api/routes_v1.py  /api/v1/me, /api/v1/documents (cursor paging), /api/v1/documents/{id}
 tests/unit/          Fast tests, no Docker required

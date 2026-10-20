@@ -10,5 +10,13 @@ from model_layer.embeddings import (
     FakeEmbedder,
     ModelNotAvailableError,
 )
+from model_layer.minilm import MiniLmEmbedder
 
-__all__ = ["DIMENSIONS", "BgeM3Embedder", "Embedder", "FakeEmbedder", "ModelNotAvailableError"]
+__all__ = [
+    "DIMENSIONS",
+    "BgeM3Embedder",
+    "Embedder",
+    "FakeEmbedder",
+    "MiniLmEmbedder",
+    "ModelNotAvailableError",
+]

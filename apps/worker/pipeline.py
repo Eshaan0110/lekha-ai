@@ -3,7 +3,8 @@
 Runs inside the ARQ worker, and is called directly by tests. Every write is scoped to the
 job's organisation. Deterministic failures (an unreadable or empty file) mark the job
 ``failed`` with a reason code and are not retried. Temporary failures (storage or index
-unavailable) also mark it ``failed`` and re-raise, so the queue retries with backoff.
+unavailable) put it back to ``queued`` with the reason and re-raise, so the queue retries
+with backoff; only the last attempt marks it ``failed``.
 """
 
 from __future__ import annotations
@@ -48,7 +49,11 @@ class TransientIngestionError(RuntimeError):
 
 
 async def run_ingestion(
-    deps: PipelineDeps, organisation_id: uuid.UUID, job_id: uuid.UUID
+    deps: PipelineDeps,
+    organisation_id: uuid.UUID,
+    job_id: uuid.UUID,
+    *,
+    final_attempt: bool = True,
 ) -> IngestionStatus | None:
     now = datetime.now(UTC)
     async with tenant_transaction(deps.session_factory, organisation_id) as s:
@@ -78,7 +83,8 @@ async def run_ingestion(
         return await _finish(deps, target, IngestionStatus.FAILED, error_code=exc.code)
     except (ObjectStoreError, VectorIndexError) as exc:
         code = "storage_unavailable" if isinstance(exc, ObjectStoreError) else "index_unavailable"
-        await _finish(deps, target, IngestionStatus.FAILED, error_code=code)
+        status = IngestionStatus.FAILED if final_attempt else IngestionStatus.QUEUED
+        await _finish(deps, target, status, error_code=code)
         raise TransientIngestionError(code) from None
     return await _finish(deps, target, IngestionStatus.SUCCEEDED, chunk_count=len(chunks))
 
@@ -151,11 +157,9 @@ async def _finish(
     error_code: str | None = None,
     chunk_count: int | None = None,
 ) -> IngestionStatus:
-    values: dict[str, object] = {
-        "status": status,
-        "error_code": error_code,
-        "finished_at": datetime.now(UTC),
-    }
+    values: dict[str, object] = {"status": status, "error_code": error_code}
+    if status is not IngestionStatus.QUEUED:  # queued again means a retry is coming
+        values["finished_at"] = datetime.now(UTC)
     if status is IngestionStatus.SUCCEEDED:
         values.update(stage="done", chunk_count=chunk_count)
     async with tenant_transaction(deps.session_factory, target.organisation_id) as s:

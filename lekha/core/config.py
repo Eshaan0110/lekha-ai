@@ -81,11 +81,13 @@ class Settings(BaseSettings):
 
     readiness_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
 
-    # Vector search (Phase 2). "fake" is a clearly labelled simulation used until the owner
-    # approves downloading BGE-M3 (Phase 2 plan, decision D3).
+    # Vector search (Phase 2). "fake" is a clearly labelled simulation; "minilm" is a small
+    # real English-only model used until BGE-M3 is downloaded (Phase 2 plan, decision D3).
+    # Each embedder needs its own collection: vectors from different models can't be compared.
     qdrant_collection: str = Field(default="lekha_chunks", pattern=r"^[a-z][a-z0-9_]{0,62}$")
-    embedder: Literal["fake", "bge-m3"] = "fake"
+    embedder: Literal["fake", "minilm", "bge-m3"] = "fake"
     embedder_model_dir: Path = Path("models/bge-m3")
+    minilm_model_dir: Path = Path("models/all-MiniLM-L6-v2")
     embedder_device: Literal["cpu", "cuda"] = "cpu"
 
     auth_mode: AuthMode = AuthMode.OIDC

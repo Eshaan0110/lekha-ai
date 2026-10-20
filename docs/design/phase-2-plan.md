@@ -5,6 +5,9 @@
   fake embedder, Qdrant indexing with permissions, guarded search, job status). Still to do:
   step 5 (versioning and deletion), step 6 (100-document corpus and red-team), the real
   BGE-M3 download (needs owner OK), and the Phase 2 report.
+- **Update 2026-10-20 (owner):** Hindi deferred. Interim real embedder **all-MiniLM-L6-v2**
+  (English only, 384 dimensions, CPU, ~90 MB, already on the laptop) via `LEKHA_EMBEDDER=minilm`
+  until the BGE-M3 download is possible. Each embedding model uses its own Qdrant collection.
 - **Date:** 2026-10-19
 - **Scope:** local, **synthetic documents only** (owner's GO of 2026-10-19). No real or confidential data.
 - **Sources:** primary plan §4 (Phase 2) and §5 (week 2); Technical Architecture §"Ingestion"

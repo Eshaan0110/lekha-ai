@@ -586,5 +586,6 @@ The error envelope now matches the plan. The Phase 2 plan
 D1–D4, and the prototype pipeline (worker, extraction, chunking, fake embedder, permission-
 tagged Qdrant index, guarded search) is built and tested. Next: versioning and deletion, the
 100-document synthetic corpus and red-team, then the Phase 2 report. BGE-M3 is downloaded
-only on the owner's explicit OK. Commit rule: one commit per finished piece of
+only on the owner's explicit OK. 2026-10-20: Hindi deferred; all-MiniLM-L6-v2 (English-only,
+real) is the interim embedder until BGE-M3 can be downloaded. Commit rule: one commit per finished piece of
 work, push only when the owner says.

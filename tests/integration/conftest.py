@@ -46,6 +46,8 @@ def settings() -> Settings:
             "postgres_db": TEST_DATABASE,
             "s3_bucket": TEST_BUCKET,
             "qdrant_collection": TEST_COLLECTION,
+            # Deterministic vectors whatever the developer's .env chooses.
+            "embedder": "fake",
         }
     )
     asyncio.run(S3ObjectStore.from_settings(test_settings).ensure_bucket())

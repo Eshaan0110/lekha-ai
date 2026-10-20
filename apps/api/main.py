@@ -74,7 +74,7 @@ def create_app(
         app.state.identity_provider = identity_provider
         app.state.object_store = store
         app.state.embedder = embedder
-        app.state.vector_index = build_vector_index(settings)
+        app.state.vector_index = build_vector_index(settings, embedder.dimensions)
         app.state.job_queue = job_queue or ArqJobQueue(settings)
         app.state.idempotency = IdempotencyStore(
             app.state.session_factory, ttl=IDEMPOTENCY_TTL, stale_after=IDEMPOTENCY_STALE_AFTER

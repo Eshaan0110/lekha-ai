@@ -10,7 +10,7 @@ from arq.connections import ArqRedis, RedisSettings
 
 from lekha.core.config import Settings
 from lekha.retrieval import QdrantIndex
-from model_layer import DIMENSIONS, BgeM3Embedder, Embedder, FakeEmbedder
+from model_layer import BgeM3Embedder, Embedder, FakeEmbedder, MiniLmEmbedder
 
 INGEST_FUNCTION = "ingest"
 
@@ -18,15 +18,18 @@ INGEST_FUNCTION = "ingest"
 def build_embedder(settings: Settings) -> Embedder:
     if settings.embedder == "bge-m3":
         return BgeM3Embedder(settings.embedder_model_dir, device=settings.embedder_device)
+    if settings.embedder == "minilm":
+        return MiniLmEmbedder(settings.minilm_model_dir)
     return FakeEmbedder()
 
 
-def build_vector_index(settings: Settings) -> QdrantIndex:
+def build_vector_index(settings: Settings, dimensions: int) -> QdrantIndex:
+    """``dimensions`` comes from the embedder; a collection of another size is refused."""
     return QdrantIndex.connect(
         str(settings.qdrant_url),
         settings.qdrant_api_key.get_secret_value(),
         settings.qdrant_collection,
-        DIMENSIONS,
+        dimensions,
     )
 
 

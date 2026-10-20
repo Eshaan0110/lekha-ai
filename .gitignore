@@ -24,3 +24,6 @@ backups/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local AI model weights (large; fetched or copied locally, never committed)
+models/

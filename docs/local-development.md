@@ -98,6 +98,21 @@ Uploading (as the curator; `metadata` is JSON, `acl_subjects` lists who may read
 curl -H "X-Dev-User: dev|chitra" -F "file=@handbook.pdf" -F 'metadata={"title":"Handbook","canonical_key":"synthetic:handbook","business_unit_id":"<alpha id from /api/v1/me>","classification":"internal","acl_subjects":["user:<your user id>"]}' http://127.0.0.1:8000/api/v1/documents
 ```
 
+## Real meaning search (interim English model)
+
+By default the worker uses the **fake** embedder (a simulation). For real meaning search in
+English, put the all-MiniLM-L6-v2 files (`model.safetensors`, `tokenizer.json`, ~90 MB, Apache-2.0)
+in `models/all-MiniLM-L6-v2/` (git-ignored) and set in `.env`:
+
+```
+LEKHA_EMBEDDER=minilm
+LEKHA_QDRANT_COLLECTION=lekha_chunks_minilm
+```
+
+Restart the API and worker, then re-upload documents (vectors from different models can't share
+a collection; the app refuses a mismatch). The weights file is checked against a pinned SHA-256.
+Kannada and Hindi need BGE-M3. Tests always use the fake embedder, whatever `.env` says.
+
 ## Database accounts
 
 | Account | Used by | Can do |

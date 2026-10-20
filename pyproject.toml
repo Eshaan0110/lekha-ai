@@ -28,6 +28,10 @@ dependencies = [
     "arq>=0.26,<1.0",
     "pypdf>=5.0,<7.0",
     "python-docx>=1.1,<2.0",
+    # Interim real embedder (all-MiniLM-L6-v2) runs in numpy with the HF tokenizer,
+    # avoiding PyTorch until BGE-M3 is approved (model_layer/minilm.py).
+    "numpy>=2.4,<3.0",
+    "tokenizers>=0.22,<1.0",
 ]
 
 [dependency-groups]

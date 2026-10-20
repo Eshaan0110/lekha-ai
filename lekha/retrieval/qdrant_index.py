@@ -70,24 +70,37 @@ class QdrantIndex:
         await self._client.aclose()
 
     async def ensure_collection(self) -> None:
-        response = await self._client.get(f"/collections/{self._collection}")
+        """Create the collection if missing; refuse one sized for another embedding model."""
+        response = await self._send(self._client.get(f"/collections/{self._collection}"))
         if response.status_code == 404:
-            await self._ok(
+            created = await self._send(
                 self._client.put(
                     f"/collections/{self._collection}",
                     json={"vectors": {"size": self._dimensions, "distance": "Cosine"}},
                 )
             )
-            for field, schema in PAYLOAD_INDEXES.items():
-                await self._ok(
-                    self._client.put(
-                        f"/collections/{self._collection}/index",
-                        params={"wait": "true"},
-                        json={"field_name": field, "field_schema": schema},
+            if created.status_code == 409:
+                # Another worker created it a moment ago (seen live with parallel uploads).
+                response = await self._ok(self._client.get(f"/collections/{self._collection}"))
+            else:
+                _raise_for_status(created)
+                for field, schema in PAYLOAD_INDEXES.items():
+                    await self._ok(
+                        self._client.put(
+                            f"/collections/{self._collection}/index",
+                            params={"wait": "true"},
+                            json={"field_name": field, "field_schema": schema},
+                        )
                     )
-                )
-        else:
-            response.raise_for_status()
+                return
+        _raise_for_status(response)
+        size = response.json()["result"]["config"]["params"]["vectors"]["size"]
+        if size != self._dimensions:
+            # Vectors from different embedding models can't be compared; never mix them.
+            raise VectorIndexError(
+                f"Collection {self._collection} holds {size}-dimension vectors but the "
+                f"embedder makes {self._dimensions}; use a separate collection per model."
+            )
 
     async def upsert(self, points: Sequence[IndexedPoint]) -> None:
         if not points:
@@ -140,9 +153,20 @@ class QdrantIndex:
 
     @staticmethod
     async def _ok(call: Any) -> httpx.Response:  # Any: a pending httpx request coroutine
+        response = await QdrantIndex._send(call)
+        _raise_for_status(response)
+        return response
+
+    @staticmethod
+    async def _send(call: Any) -> httpx.Response:  # Any: a pending httpx request coroutine
+        """Await a request; network failures become VectorIndexError, statuses are kept."""
         try:
             response: httpx.Response = await call
-            response.raise_for_status()
         except httpx.HTTPError as exc:
             raise VectorIndexError(f"vector index request failed: {type(exc).__name__}") from None
         return response
+
+
+def _raise_for_status(response: httpx.Response) -> None:
+    if response.is_error:
+        raise VectorIndexError(f"vector index request failed: HTTP {response.status_code}")

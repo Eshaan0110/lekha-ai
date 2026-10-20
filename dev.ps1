@@ -145,7 +145,9 @@ try {
             Invoke-Native 'uv' $seedArgs
         }
         'worker' {
-            # Background ingestion worker (extract, chunk, embed, index).
+            # Background ingestion worker (extract, chunk, embed, index). UTF-8 output, because
+            # ARQ's log lines contain arrows the default Windows console encoding can't print.
+            $env:PYTHONIOENCODING = 'utf-8'
             Invoke-Native 'uv' @('run', '--locked', 'arq', 'apps.worker.main.WorkerSettings')
         }
         'run' {
