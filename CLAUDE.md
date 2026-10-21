@@ -599,5 +599,7 @@ D1–D6 (local Ollama + fake LLM for tests, hybrid retrieval now, reranker defer
 adapter with stubbed tests, UI deferred, 100-question golden set). Build work is complete and
 the Phase 3 report is written ([`docs/reports/phase-3-report.md`](docs/reports/phase-3-report.md)):
 all quality and security targets met on the synthetic golden set, p95 latency not met on the
-laptop. Waiting for the owner's go/no-go before Phase 4. Commit rule: one commit per finished piece of
+laptop. Owner said go ahead with Phase 4 (2026-10-21); the Phase 4 plan
+([`docs/design/phase-4-plan.md`](docs/design/phase-4-plan.md)) is proposed and must be approved
+before building. Commit rule: one commit per finished piece of
 work, push only when the owner says.

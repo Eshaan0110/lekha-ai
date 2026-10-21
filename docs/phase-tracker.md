@@ -95,7 +95,11 @@ be downloaded; it understands English only, so Kannada search waits for BGE-M3.
 | 4. `/api/v1/ask`, logs, rate limit | Tested | Migration 0008 (query_log, answer_log, citation, RLS); `test_ask.py` (13): cited answers name their version; the model is never shown unreadable text (prompts captured); abstains without calling the model on no/weak evidence; invented or unparseable replies never returned; 503 on model outage or none configured; per-user Redis rate limit fails closed (429/503); deletion wipes logged answers that quoted the document |
 | 5. Golden set and evaluation | Tested | 42 synthetic policies, 100 hand-keyed questions; `test_golden.py` (fake model: 0 permission violations on every run); real run BGE-M3 + qwen3.5:9b: [eval/golden-ollama-bge-m3.md](eval/golden-ollama-bge-m3.md) — all quality targets met, 0 violations, 0 injection failures, p95 28.8 s (target 6 s, laptop) |
 
-## Phases 4–7
+## Phase 4 — Daily-use companion (local, synthetic data only)
+
+Owner said go ahead (2026-10-21). Plan proposed: [design/phase-4-plan.md](design/phase-4-plan.md), waiting for decisions D1–D6. Nothing built yet. The real 20-user pilot stays blocked on Phase 0.
+
+## Phases 5–7
 
 
 Not started. Must not begin before Phase 1 acceptance and explicit owner approval.
