@@ -60,7 +60,7 @@ Overall: **Build work complete; end-of-phase report written ([reports/phase-1-re
 
 ## Phase 2 — Document ingestion (local, synthetic data only)
 
-Overall: **Build work complete; end-of-phase report written ([reports/phase-2-report.md](reports/phase-2-report.md)); awaiting owner go/no-go for Phase 3.** Embedding decision recorded as ADR-0012 (Proposed).
+Overall: **Build work complete; end-of-phase report written ([reports/phase-2-report.md](reports/phase-2-report.md)); owner **GO for Phase 3** (2026-10-21, local, synthetic only).** ADR-0012 accepted 2026-10-21.
 
 Plan approved with the recommended decisions D1–D4 ([design/phase-2-plan.md](design/phase-2-plan.md)).
 **Prototype pipeline built and tested** (2026-10-20):
@@ -83,7 +83,11 @@ Owner decisions (2026-10-20): **Hindi is deferred** (script detection stays; Hin
 corpus and acceptance for now). Use **all-MiniLM-L6-v2** as the real embedder until BGE-M3 can
 be downloaded; it understands English only, so Kannada search waits for BGE-M3.
 
-## Phases 3–7
+## Phase 3 — Grounded Q&A (local, synthetic data only)
+
+Owner GO 2026-10-21. Plan proposed: [design/phase-3-plan.md](design/phase-3-plan.md), waiting for decisions D1–D6. Nothing built yet.
+
+## Phases 4–7
 
 
 Not started. Must not begin before Phase 1 acceptance and explicit owner approval.

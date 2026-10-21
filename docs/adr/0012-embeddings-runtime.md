@@ -1,7 +1,6 @@
 # ADR-0012: Embedding models and how they run locally
 
-- **Status:** Proposed (the owner approved downloading BGE-M3 on 2026-10-20; the choice of
-  ONNX Runtime over PyTorch, and the interim MiniLM model, await formal acceptance)
+- **Status:** Accepted by the owner on 2026-10-21
 - **Date:** 2026-10-21
 
 ## Context

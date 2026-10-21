@@ -590,6 +590,8 @@ embedder; the owner approved BGE-M3, which runs from its ONNX export (no PyTorch
 slow download finishes. The 100-document corpus and 50-question red-team pass with 0
 anomalies (2026-10-21), with the fake embedder and with real BGE-M3 (downloaded and working
 on CPU). The Phase 2 report is written
-([`docs/reports/phase-2-report.md`](docs/reports/phase-2-report.md)); waiting for the owner's
-go/no-go before Phase 3, and acceptance of ADR-0012. Commit rule: one commit per finished piece of
+([`docs/reports/phase-2-report.md`](docs/reports/phase-2-report.md)).
+
+**Phase 3 (2026-10-21):** owner GO for local development with **synthetic documents only**;
+ADR-0012 accepted. The Phase 3 plan must be proposed and approved before building. Commit rule: one commit per finished piece of
 work, push only when the owner says.
