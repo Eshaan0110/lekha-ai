@@ -22,25 +22,46 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile
 
 from apps.api.auth import CurrentUser, require_auth_context
+from apps.api.ratelimit import RateLimiter, RateLimiterUnavailableError
 from apps.api.uploads import WrittenDocument, create_document, enqueue_ingestion
+from apps.wiring import JobQueue
 from db.meetings import (
+    MeetingDetail,
+    approve_minutes,
     existing_user_ids,
     find_same_meeting,
+    ingestion_job_of,
     list_readable_meetings,
+    lock_minutes,
+    minutes_of,
     readable_meeting,
     record_meeting,
+    record_minutes,
+    reject_minutes,
     set_participants,
 )
+from db.schema import MeetingMinutes, MinutesStatus
 from db.tenancy import tenant_transaction
-from lekha.auth import Classification, meeting_import_denial, user_badge
+from lekha.auth import AuthContext, Classification, meeting_import_denial, user_badge
+from lekha.generation import (
+    MINUTES_SCHEMA,
+    MINUTES_SYSTEM_PROMPT,
+    MinutesTemplate,
+    parse_minutes,
+    render_minutes_prompt,
+    verify_minutes,
+)
 from lekha.ingestion import (
+    Segment,
     TranscriptError,
     format_time,
     from_canonical_json,
+    moment_of_quote,
     parse_transcript,
     to_canonical_json,
 )
@@ -52,6 +73,7 @@ from lekha.memory import (
     ValidatedFile,
     sanitise_filename,
 )
+from model_layer import LanguageModel, LanguageModelError, LlmRequest
 
 logger = structlog.get_logger("lekha.meetings")
 
@@ -127,6 +149,7 @@ class TurnOut(BaseModel):
 
 class MeetingDetailOut(MeetingOut):
     transcript: list[TurnOut]
+    you_organised: bool  # the organiser approves minutes and may delete the meeting
 
 
 def _metadata(raw: object) -> MeetingMetadata:
@@ -291,6 +314,7 @@ async def get_meeting(
         started_at=m.started_at,
         version_number=m.version_number,
         participants=list(m.participants),
+        you_organised=found.organiser_user_id == ctx.user_id,
         transcript=[
             TurnOut(
                 at=format_time(t.start_ms) if t.start_ms is not None else None,
@@ -301,3 +325,287 @@ async def get_meeting(
             for t in segments
         ],
     )
+
+
+# --- minutes (plan F-12: drafted by Lekha, approved by a person) ---------------------
+
+MAX_MINUTES_WORDS = 6_000  # what the local model's context comfortably holds
+
+
+class MinutesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    template: MinutesTemplate = MinutesTemplate.STANDARD
+
+
+class DecisionIO(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    text: str = Field(min_length=1, max_length=1000)
+    evidence: str = Field(default="", max_length=1000)
+    at: str | None = None  # when the evidence was said, if the transcript is timed
+
+
+class ActionIO(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    task: str = Field(min_length=1, max_length=500)
+    owner: str = Field(default="", max_length=120)
+    due: str = Field(default="", max_length=60)
+    evidence: str = Field(default="", max_length=1000)
+    at: str | None = None
+    owner_spoke: bool | None = None  # was the owner one of the speakers?
+
+
+class MinutesOut(BaseModel):
+    id: uuid.UUID
+    meeting_id: uuid.UUID
+    status: MinutesStatus
+    template: str
+    summary: str
+    decisions: list[DecisionIO]
+    action_items: list[ActionIO]
+    dropped_items: int
+    model: str
+    edited: bool
+    current: bool  # drafted from the meeting's current transcript version?
+    created_at: datetime
+    decided_at: datetime | None
+
+
+class MinutesEdit(BaseModel):
+    """Optional corrections by the organiser, applied when approving."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    summary: str = Field(max_length=4000)
+    decisions: list[DecisionIO] = Field(max_length=50)
+    action_items: list[ActionIO] = Field(max_length=50)
+
+
+def _minutes_out(m: MeetingMinutes, current_version_id: uuid.UUID) -> MinutesOut:
+    return MinutesOut(
+        id=m.id,
+        meeting_id=m.meeting_id,
+        status=m.status,
+        template=m.template,
+        summary=m.summary,
+        decisions=[DecisionIO.model_validate(d) for d in m.decisions],
+        action_items=[ActionIO.model_validate(a) for a in m.action_items],
+        dropped_items=m.dropped_items,
+        model=m.model,
+        edited=m.edited,
+        current=m.transcript_version_id == current_version_id,
+        created_at=m.created_at,
+        decided_at=m.decided_at,
+    )
+
+
+async def _meeting_or_404(
+    request: Request, ctx: AuthContext, meeting_id: uuid.UUID
+) -> MeetingDetail:
+    async with tenant_transaction(request.app.state.session_factory, ctx.organisation_id) as s:
+        found = await readable_meeting(s, ctx, meeting_id, now=datetime.now(UTC))
+    if found is None:
+        raise HTTPException(status_code=404, detail="Not found.")
+    return found
+
+
+async def _segments(request: Request, meeting: MeetingDetail) -> list[Segment]:
+    store: ObjectStore = request.app.state.object_store
+    try:
+        data, _ = await store.get(meeting.storage_key)
+        return from_canonical_json(data)
+    except ObjectStoreError:
+        logger.exception("meeting_transcript_unavailable")
+        raise HTTPException(status_code=503, detail="File storage is unavailable.") from None
+    except TranscriptError:
+        logger.error("meeting_transcript_unreadable")
+        raise HTTPException(status_code=500, detail="The transcript could not be read.") from None
+
+
+def _line(segment: Segment) -> str:
+    when = f"[{format_time(segment.start_ms)}] " if segment.start_ms is not None else ""
+    who = f"{segment.speaker}: " if segment.speaker else ""
+    return f"{when}{who}{segment.text}"
+
+
+def _at(transcript: str, quote: str) -> str | None:
+    moment = moment_of_quote(transcript, quote)
+    return format_time(moment) if moment is not None else None
+
+
+@router.post(
+    "/meetings/{meeting_id}/minutes",
+    status_code=201,
+    response_model=MinutesOut,
+    responses={
+        404: {"description": "Not found, or you were not a participant"},
+        422: {"description": "Transcript too long to summarise on this setup"},
+        429: {"description": "Too many requests this minute"},
+        503: {"description": "No language model configured, or it is unavailable"},
+    },
+)
+async def draft_minutes(
+    request: Request, ctx: CurrentUser, meeting_id: uuid.UUID, body: MinutesRequest
+) -> MinutesOut:
+    """Any participant may ask for a draft; only the organiser can approve it."""
+    model: LanguageModel | None = request.app.state.language_model
+    if model is None:
+        raise HTTPException(status_code=503, detail="No language model is configured.")
+    meeting = await _meeting_or_404(request, ctx, meeting_id)
+    limiter: RateLimiter = request.app.state.ask_limiter
+    try:
+        decision = await limiter.hit("minutes", ctx.user_id)
+    except RateLimiterUnavailableError:
+        raise HTTPException(status_code=503, detail="Please try again shortly.") from None
+    if not decision.allowed:
+        raise HTTPException(status_code=429, detail="Too many requests; please wait a moment.")
+
+    segments = await _segments(request, meeting)
+    lines = [_line(s) for s in segments]
+    if sum(len(line.split()) for line in lines) > MAX_MINUTES_WORDS:
+        raise HTTPException(
+            status_code=422, detail="This transcript is too long to summarise on this setup."
+        )
+    started = meeting.summary.started_at.strftime("%Y-%m-%d %H:%M UTC")
+    settings = request.app.state.settings
+    try:
+        reply = await model.generate(
+            LlmRequest(
+                system=MINUTES_SYSTEM_PROMPT,
+                user=render_minutes_prompt(meeting.summary.title, started, lines, body.template),
+                max_output_tokens=max(settings.llm_max_output_tokens, 1200),
+                json_schema=MINUTES_SCHEMA,
+            )
+        )
+    except LanguageModelError:
+        logger.warning("minutes_model_unavailable", model=model.model_name)
+        raise HTTPException(status_code=503, detail="The language model is unavailable.") from None
+    draft = parse_minutes(reply.text)
+    if draft is None:
+        raise HTTPException(status_code=502, detail="The draft couldn't be read; please try again.")
+    transcript = "\n".join(lines)
+    verified = verify_minutes(draft, transcript, {s.speaker for s in segments if s.speaker})
+    decisions = [
+        {"text": d.text, "evidence": d.evidence, "at": _at(transcript, d.evidence)}
+        for d in verified.decisions
+    ]
+    actions = [
+        {
+            "task": a.task,
+            "owner": a.owner,
+            "due": a.due,
+            "evidence": a.evidence,
+            "at": _at(transcript, a.evidence),
+            "owner_spoke": a.owner_spoke,
+        }
+        for a in verified.action_items
+    ]
+
+    async with tenant_transaction(request.app.state.session_factory, ctx.organisation_id) as s:
+        minutes = await record_minutes(
+            s,
+            organisation_id=ctx.organisation_id,
+            meeting_id=meeting_id,
+            transcript_version_id=meeting.version_id,
+            template=body.template.value,
+            summary=verified.summary,
+            decisions=decisions,
+            action_items=actions,
+            dropped_items=verified.dropped,
+            model=reply.model,
+            drafted_by=ctx.user_id,
+        )
+        out = _minutes_out(minutes, meeting.version_id)
+    request.scope.setdefault("state", {})["audit_target"] = ("meeting_minutes", str(out.id))
+    logger.info(
+        "minutes_drafted",
+        decisions=len(decisions),
+        action_items=len(actions),
+        dropped=verified.dropped,
+    )
+    return out
+
+
+@router.get(
+    "/meetings/{meeting_id}/minutes",
+    response_model=list[MinutesOut],
+    responses={404: {"description": "Not found, or you were not a participant"}},
+)
+async def list_minutes(
+    request: Request, ctx: CurrentUser, meeting_id: uuid.UUID
+) -> list[MinutesOut]:
+    meeting = await _meeting_or_404(request, ctx, meeting_id)
+    async with tenant_transaction(request.app.state.session_factory, ctx.organisation_id) as s:
+        return [_minutes_out(m, meeting.version_id) for m in await minutes_of(s, meeting_id)]
+
+
+async def _decide(
+    request: Request,
+    ctx: AuthContext,
+    minutes_id: uuid.UUID,
+    approve: bool,
+    edit: MinutesEdit | None,
+) -> MinutesOut:
+    now = datetime.now(UTC)
+    async with tenant_transaction(request.app.state.session_factory, ctx.organisation_id) as s:
+        minutes = await lock_minutes(s, minutes_id)
+        meeting = None
+        if minutes is not None:
+            meeting = await readable_meeting(s, ctx, minutes.meeting_id, now=now)
+        if minutes is None or meeting is None:
+            raise HTTPException(status_code=404, detail="Not found.")
+        if meeting.organiser_user_id != ctx.user_id:
+            raise HTTPException(status_code=403, detail="Only the meeting's organiser can decide.")
+        if minutes.status is not MinutesStatus.DRAFT:
+            raise HTTPException(status_code=409, detail="These minutes were already decided.")
+        if minutes.transcript_version_id != meeting.version_id:
+            raise HTTPException(
+                status_code=409, detail="A newer transcript was imported; draft the minutes again."
+            )
+        job_id = None
+        if approve:
+            edited = edit.model_dump() if edit is not None else None
+            await approve_minutes(s, minutes, decided_by=ctx.user_id, now=now, edited=edited)
+            job_id = await ingestion_job_of(s, meeting.version_id)
+        else:
+            await reject_minutes(s, minutes, decided_by=ctx.user_id, now=now)
+        out = _minutes_out(minutes, meeting.version_id)
+    if job_id is not None:
+        # Approved minutes become searchable with the meeting: index the transcript again.
+        queue: JobQueue = request.app.state.job_queue
+        try:
+            await queue.enqueue_reindex(ctx.organisation_id, job_id)
+        except (OSError, RedisError):
+            logger.exception("minutes_reindex_enqueue_failed")
+    request.scope.setdefault("state", {})["audit_target"] = ("meeting_minutes", str(minutes_id))
+    return out
+
+
+@router.post(
+    "/minutes/{minutes_id}/approve",
+    response_model=MinutesOut,
+    responses={
+        403: {"description": "Only the organiser may approve"},
+        404: {"description": "Not found, or you were not a participant"},
+        409: {"description": "Already decided, or the transcript changed since"},
+    },
+)
+async def approve(
+    request: Request, ctx: CurrentUser, minutes_id: uuid.UUID, body: MinutesEdit | None = None
+) -> MinutesOut:
+    return await _decide(request, ctx, minutes_id, True, body)
+
+
+@router.post(
+    "/minutes/{minutes_id}/reject",
+    response_model=MinutesOut,
+    responses={
+        403: {"description": "Only the organiser may reject"},
+        404: {"description": "Not found, or you were not a participant"},
+        409: {"description": "Already decided, or the transcript changed since"},
+    },
+)
+async def reject(request: Request, ctx: CurrentUser, minutes_id: uuid.UUID) -> MinutesOut:
+    return await _decide(request, ctx, minutes_id, False, None)

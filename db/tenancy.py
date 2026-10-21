@@ -38,6 +38,7 @@ TENANT_TABLES_CHILD_FIRST = (
     "citation",
     "answer_log",
     "query_log",
+    "meeting_minutes",
     "meeting_participant",
     "meeting",
     "deletion_request",

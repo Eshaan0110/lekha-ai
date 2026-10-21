@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from apps.api.main import create_app
@@ -16,12 +17,13 @@ from apps.api.ratelimit import RateDecision
 from apps.scripts.seed_dev_data import SeedResult, seed_synthetic_organisation
 from apps.wiring import build_vector_index
 from apps.worker.pipeline import PipelineDeps, run_ingestion
+from apps.worker.purge import run_purge
 from db.engine import create_session_factory
 from db.schema import IngestionStatus
 from lekha.core.config import AuthMode, Settings
 from lekha.memory.s3_store import S3ObjectStore
 from model_layer import FakeEmbedder
-from tests.fixtures.fake_llm import FakeLanguageModel
+from tests.fixtures.fake_llm import Behaviour, FakeLanguageModel
 from tests.integration.support import delete_tenant
 
 pytestmark = pytest.mark.integration
@@ -40,11 +42,17 @@ STARTED = "2026-10-14T10:00:00+05:30"
 
 
 class NullQueue:
+    def __init__(self) -> None:
+        self.reindexes: list[uuid.UUID] = []
+
     async def enqueue_ingestion(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None:
         return None
 
     async def enqueue_purge(self, organisation_id: uuid.UUID, request_id: uuid.UUID) -> None:
         return None
+
+    async def enqueue_reindex(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None:
+        self.reindexes.append(job_id)
 
     async def close(self) -> None:
         return None
@@ -65,13 +73,18 @@ async def org(owner_engine: AsyncEngine) -> AsyncIterator[SeedResult]:
 
 
 @pytest.fixture
-def client(settings: Settings, org: SeedResult) -> Iterator[TestClient]:
+def queue() -> NullQueue:
+    return NullQueue()
+
+
+@pytest.fixture
+def client(settings: Settings, org: SeedResult, queue: NullQueue) -> Iterator[TestClient]:
     app_settings = settings.model_copy(
         update={"auth_mode": AuthMode.DEV, "dev_auth_organisation_id": org.organisation_id}
     )
     app = create_app(
         app_settings,
-        job_queue=NullQueue(),
+        job_queue=queue,
         language_model=FakeLanguageModel(),
         ask_limiter=AllowAll(),
     )
@@ -286,3 +299,154 @@ async def test_the_organiser_can_delete_their_meeting_but_other_participants_can
     assert delete("ravi") == 404
     assert delete("asha") == 202
     assert client.get("/api/v1/meetings", headers=_as("meera")).json() == []
+
+
+# --- minutes ----------------------------------------------------------------------------
+
+WITH_ACTIONS = (
+    SAFETY_REVIEW
+    + "\n3\n00:18:05.000 --> 00:18:12.000\n"
+    + "<v Asha>Kavya will update the evacuation map for Building C by Friday.</v>\n"
+)
+
+
+def _draft(client: TestClient, user: str, meeting_id: str) -> Any:
+    return client.post(
+        f"/api/v1/meetings/{meeting_id}/minutes", headers=_as(user), json={"template": "standard"}
+    )
+
+
+async def test_minutes_are_drafted_by_participants_and_approved_only_by_the_organiser(
+    client: TestClient, org: SeedResult, deps: PipelineDeps, queue: NullQueue
+) -> None:
+    meeting = await _imported(
+        client, org, deps, "asha", participants=["meera"], transcript=WITH_ACTIONS
+    )
+    assert _draft(client, "chitra", meeting["meeting_id"]).status_code == 404  # wasn't there
+
+    draft = _draft(client, "meera", meeting["meeting_id"])
+    assert draft.status_code == 201, draft.text
+    minutes = draft.json()
+    assert minutes["status"] == "draft"
+    [decision] = minutes["decisions"]
+    assert decision["at"] == "12:40"
+    assert "retrained by the end of November" in decision["evidence"]
+    [action] = minutes["action_items"]
+    assert (action["owner"], action["at"], action["owner_spoke"]) == ("Asha", "18:05", True)
+
+    approve_url = f"/api/v1/minutes/{minutes['id']}/approve"
+    assert client.post(approve_url, headers=_as("meera")).status_code == 403  # not organiser
+    assert client.post(approve_url, headers=_as("ravi")).status_code == 404
+    approved = client.post(approve_url, headers=_as("asha"))
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "approved"
+    assert queue.reindexes == [uuid.UUID(meeting["ingestion_job_id"])]
+    assert client.post(approve_url, headers=_as("asha")).status_code == 409  # already decided
+
+    # The reindex job runs: the approved minutes become part of the meeting's memory.
+    await run_ingestion(deps, org.organisation_id, uuid.UUID(meeting["ingestion_job_id"]))
+    hits = _search(client, "meera", "evacuation map Building C Friday")
+    minutes_hits = [h for h in hits if h["heading_path"] == ["Minutes"]]
+    assert minutes_hits
+    assert minutes_hits[0]["document_id"] == meeting["document_id"]
+    for user in ("chitra", "ravi"):
+        found = {r["document_id"] for r in _search(client, user, "evacuation map Building C")}
+        assert meeting["document_id"] not in found
+
+
+async def test_the_organiser_can_correct_minutes_while_approving(
+    client: TestClient, org: SeedResult, deps: PipelineDeps
+) -> None:
+    meeting = await _imported(
+        client, org, deps, "asha", participants=["meera"], transcript=WITH_ACTIONS
+    )
+    minutes = _draft(client, "asha", meeting["meeting_id"]).json()
+    edited = {
+        "summary": "Forklift incident reviewed; retraining and map update agreed.",
+        "decisions": [{"text": "Retrain all forklift drivers by 30 November"}],
+        "action_items": [{"task": "Update the evacuation map", "owner": "Kavya", "due": "Friday"}],
+    }
+    approved = client.post(
+        f"/api/v1/minutes/{minutes['id']}/approve", headers=_as("asha"), json=edited
+    ).json()
+    assert approved["edited"] is True
+    assert approved["action_items"][0]["owner"] == "Kavya"
+    listed = client.get(
+        f"/api/v1/meetings/{meeting['meeting_id']}/minutes", headers=_as("meera")
+    ).json()
+    assert [m["status"] for m in listed] == ["approved"]
+
+
+async def test_invented_evidence_never_reaches_the_approver(
+    org: SeedResult, deps: PipelineDeps, settings: Settings, client: TestClient
+) -> None:
+    meeting = await _imported(
+        client, org, deps, "asha", participants=["meera"], transcript=WITH_ACTIONS
+    )
+    app = create_app(
+        settings.model_copy(
+            update={"auth_mode": AuthMode.DEV, "dev_auth_organisation_id": org.organisation_id}
+        ),
+        job_queue=NullQueue(),
+        language_model=FakeLanguageModel(behaviour=Behaviour.INVENT),
+        ask_limiter=AllowAll(),
+    )
+    with TestClient(app) as inventing:
+        minutes = _draft(inventing, "asha", meeting["meeting_id"]).json()
+    assert minutes["decisions"] == []
+    assert minutes["action_items"] == []
+    assert minutes["dropped_items"] == 2
+
+
+async def test_a_new_transcript_makes_old_drafts_stale(
+    client: TestClient, org: SeedResult, deps: PipelineDeps
+) -> None:
+    meeting = await _imported(
+        client,
+        org,
+        deps,
+        "asha",
+        participants=["meera"],
+        transcript=WITH_ACTIONS,
+        external_id="t:1",
+    )
+    old = _draft(client, "asha", meeting["meeting_id"]).json()
+    newer = _import(
+        client,
+        org,
+        "asha",
+        participants=["meera"],
+        transcript=WITH_ACTIONS.replace("by Friday", "by Monday"),
+        external_id="t:1",
+    ).json()
+    await run_ingestion(deps, org.organisation_id, uuid.UUID(newer["ingestion_job_id"]))
+    refused = client.post(f"/api/v1/minutes/{old['id']}/approve", headers=_as("asha"))
+    assert refused.status_code == 409
+    listed = client.get(
+        f"/api/v1/meetings/{meeting['meeting_id']}/minutes", headers=_as("asha")
+    ).json()
+    assert listed[0]["current"] is False
+
+
+async def test_deleting_a_meeting_deletes_its_minutes(
+    client: TestClient, org: SeedResult, deps: PipelineDeps, owner_engine: AsyncEngine
+) -> None:
+    meeting = await _imported(
+        client, org, deps, "asha", participants=["meera"], transcript=WITH_ACTIONS
+    )
+    minutes = _draft(client, "asha", meeting["meeting_id"]).json()
+    client.post(f"/api/v1/minutes/{minutes['id']}/approve", headers=_as("asha"))
+    response = client.post(
+        "/api/v1/deletion-requests",
+        headers=_as("asha"),
+        json={"scope": "document", "document_id": meeting["document_id"]},
+    )
+    await run_purge(deps, org.organisation_id, uuid.UUID(response.json()["id"]))
+    async with owner_engine.connect() as conn:
+        left = (
+            await conn.execute(
+                text("SELECT count(*) FROM meeting_minutes WHERE meeting_id = :m"),
+                {"m": meeting["meeting_id"]},
+            )
+        ).scalar_one()
+    assert left == 0

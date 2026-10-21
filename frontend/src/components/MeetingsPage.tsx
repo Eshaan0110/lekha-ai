@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { type MeetingDetail, type MeetingItem, type Me, ApiError, api } from "../api";
+import { type MeetingDetail, type MeetingItem, type Me, type Minutes, ApiError, api } from "../api";
 import { PERSONAS } from "../personas";
 
 const PEOPLE = ["asha", "meera", "ravi", "chitra", "bina"];
@@ -50,13 +50,13 @@ export function MeetingsPage({ user }: { user: string }) {
           </ul>
         )}
       </section>
-      {open && <Transcript meeting={open} onClose={() => setOpen(null)} />}
+      {open && <Transcript user={user} meeting={open} onClose={() => setOpen(null)} />}
       {unit && <ImportMeeting user={user} unitId={unit.business_unit_id} onDone={load} />}
     </div>
   );
 }
 
-function Transcript({ meeting, onClose }: { meeting: MeetingDetail; onClose: () => void }) {
+function Transcript({ user, meeting, onClose }: { user: string; meeting: MeetingDetail; onClose: () => void }) {
   return (
     <div className="panel-backdrop" onClick={onClose}>
       <aside className="panel" role="dialog" aria-label="Meeting transcript" onClick={(e) => e.stopPropagation()}>
@@ -68,6 +68,8 @@ function Transcript({ meeting, onClose }: { meeting: MeetingDetail; onClose: () 
           {meeting.title} <span className="version">v{meeting.version_number}</span>
         </h2>
         <p className="muted small">With {meeting.participants.join(", ")}</p>
+        <MinutesSection user={user} meeting={meeting} />
+        <h3 className="subhead">Transcript</h3>
         <ol className="transcript">
           {meeting.transcript.map((turn, i) => (
             <li key={i}>
@@ -81,6 +83,120 @@ function Transcript({ meeting, onClose }: { meeting: MeetingDetail; onClose: () 
         </ol>
       </aside>
     </div>
+  );
+}
+
+function MinutesSection({ user, meeting }: { user: string; meeting: MeetingDetail }) {
+  const [all, setAll] = useState<Minutes[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = () => {
+    api.minutes(user, meeting.id).then(setAll).catch(() => setAll([]));
+  };
+  useEffect(() => {
+    load(); // reload when the meeting changes
+  }, [meeting.id]);
+
+  const draft = async () => {
+    setBusy(true);
+    setNote("Drafting minutes from the transcript… (about a minute on this laptop)");
+    try {
+      await api.draftMinutes(user, meeting.id);
+      setNote(null);
+      load();
+    } catch (error) {
+      setNote(error instanceof ApiError ? error.message : "Drafting failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const decide = async (id: string, approve: boolean) => {
+    setBusy(true);
+    try {
+      await api.decideMinutes(user, id, approve);
+      setNote(approve ? "Approved. The minutes become searchable for the participants shortly." : "Rejected.");
+      load();
+    } catch (error) {
+      setNote(error instanceof ApiError ? error.message : "That didn't work.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const shown = (all ?? []).filter((m) => m.current && m.status !== "superseded");
+  return (
+    <section className="minutes">
+      <div className="minutes-head">
+        <h3 className="subhead">Minutes</h3>
+        <button className="pill" disabled={busy} onClick={() => void draft()}>
+          Draft minutes
+        </button>
+      </div>
+      {note && <p className="muted small">{note}</p>}
+      {all && shown.length === 0 && <p className="muted small">No minutes yet.</p>}
+      {shown.map((m) => (
+        <article key={m.id} className={`minutes-card ${m.status}`}>
+          <p className="muted small">
+            {m.status === "draft" ? "Draft, waiting for the organiser" : m.status === "approved" ? "Approved" : "Rejected"}
+            {m.edited ? " · edited" : ""}
+            {m.dropped_items > 0 ? ` · ${m.dropped_items} unsupported item(s) removed` : ""}
+          </p>
+          {m.summary && <p>{m.summary}</p>}
+          {m.decisions.length > 0 && (
+            <>
+              <h4>Decisions</h4>
+              <ul>
+                {m.decisions.map((d, i) => (
+                  <li key={i}>
+                    {d.text}
+                    {d.evidence && (
+                      <span className="quote block">
+                        {d.at ? `${d.at} · ` : ""}“{d.evidence}”
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {m.action_items.length > 0 && (
+            <>
+              <h4>Action items</h4>
+              <ul>
+                {m.action_items.map((a, i) => (
+                  <li key={i}>
+                    {a.task}
+                    <span className="muted small">
+                      {" "}
+                      · {a.owner || "no owner named"}
+                      {a.owner && a.owner_spoke === false ? " (didn't speak in the meeting)" : ""}
+                      {a.due ? ` · due ${a.due}` : ""}
+                    </span>
+                    {a.evidence && (
+                      <span className="quote block">
+                        {a.at ? `${a.at} · ` : ""}“{a.evidence}”
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {m.status === "draft" && meeting.you_organised && (
+            <div className="feedback">
+              <button className="pill on" disabled={busy} onClick={() => void decide(m.id, true)}>
+                Approve
+              </button>
+              <button className="pill" disabled={busy} onClick={() => void decide(m.id, false)}>
+                Reject
+              </button>
+            </div>
+          )}
+        </article>
+      ))}
+    </section>
   );
 }
 

@@ -78,6 +78,8 @@ class JobQueue(Protocol):
 
     async def enqueue_purge(self, organisation_id: uuid.UUID, request_id: uuid.UUID) -> None: ...
 
+    async def enqueue_reindex(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None: ...
+
     async def close(self) -> None: ...
 
 
@@ -106,6 +108,18 @@ class ArqJobQueue:
             str(organisation_id),
             str(request_id),
             _job_id=f"purge:{request_id}",
+            _queue_name=queue_name(self._settings),
+        )
+
+    async def enqueue_reindex(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None:
+        """Run an already-finished ingestion job again (e.g. approved minutes to add). A fresh
+        queue ID, because ARQ ignores a job ID it has seen recently."""
+        pool = await self._get_pool()
+        await pool.enqueue_job(
+            INGEST_FUNCTION,
+            str(organisation_id),
+            str(job_id),
+            _job_id=f"reindex:{job_id}:{uuid.uuid4().hex}",
             _queue_name=queue_name(self._settings),
         )
 

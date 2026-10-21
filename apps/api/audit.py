@@ -26,6 +26,7 @@ _TARGET_PARAMS = {
     "chunk_id": "chunk",
     "query_id": "query_log",
     "meeting_id": "meeting",
+    "minutes_id": "meeting_minutes",
 }
 
 

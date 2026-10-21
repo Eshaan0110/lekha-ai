@@ -44,9 +44,13 @@ class RecordingQueue:
     def __init__(self) -> None:
         self.jobs: list[tuple[uuid.UUID, uuid.UUID]] = []
         self.purges: list[tuple[uuid.UUID, uuid.UUID]] = []
+        self.reindexes: list[tuple[uuid.UUID, uuid.UUID]] = []
 
     async def enqueue_purge(self, organisation_id: uuid.UUID, request_id: uuid.UUID) -> None:
         self.purges.append((organisation_id, request_id))
+
+    async def enqueue_reindex(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None:
+        self.reindexes.append((organisation_id, job_id))
 
     async def enqueue_ingestion(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None:
         self.jobs.append((organisation_id, job_id))

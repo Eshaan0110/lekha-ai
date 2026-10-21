@@ -16,6 +16,7 @@ import structlog
 from apps.worker.pipeline import PipelineDeps, TransientJobError
 from db.answers import redact_answers_citing
 from db.deletion import delete_document_chunks, load_purge_target, resolve_request
+from db.meetings import delete_minutes_of_document
 from db.schema import DeletionStatus
 from db.tenancy import tenant_transaction
 from lekha.memory import ObjectStoreError
@@ -44,6 +45,7 @@ async def run_purge(
         await deps.index.delete_document(target.document_id)
         async with tenant_transaction(deps.session_factory, organisation_id) as s:
             chunks = await delete_document_chunks(s, target.document_id)
+            await delete_minutes_of_document(s, target.document_id)
             # Logged answers quoting the document are derived data too (plan).
             redacted = await redact_answers_citing(s, target.document_id, now=datetime.now(UTC))
         for key in target.storage_keys:

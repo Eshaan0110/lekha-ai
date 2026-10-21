@@ -204,6 +204,15 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 0
 .transcript li { display: grid; grid-template-columns: 3.5rem 1fr; gap: 0.5rem; line-height: 1.55; }
 .turn-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.85rem; padding-top: 0.1rem; }
 
+.subhead { font-size: 1rem; margin: 1.25rem 0 0.4rem; }
+.minutes-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.minutes-card { background: var(--surface-2); border-radius: 10px; padding: 0.75rem 0.9rem; margin-top: 0.5rem; }
+.minutes-card.approved { border-left: 3px solid var(--accent); }
+.minutes-card.rejected { opacity: 0.6; }
+.minutes-card h4 { margin: 0.6rem 0 0.2rem; font-size: 0.9rem; }
+.minutes-card ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.quote.block { display: block; font-size: 0.85rem; }
+
 @media (max-width: 640px) {
   .topbar { gap: 0.75rem; }
   .who { margin-left: 0; width: 100%; }

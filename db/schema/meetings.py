@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from enum import StrEnum
+from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
@@ -20,10 +22,11 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base
-from db.schema._common import TenantScoped
+from db.schema._common import TenantScoped, pg_enum
 
 
 class Meeting(TenantScoped, Base):
@@ -70,4 +73,58 @@ class MeetingParticipant(TenantScoped, Base):
         ForeignKeyConstraint(
             ["organisation_id", "user_id"], ["app_user.organisation_id", "app_user.id"]
         ),
+    )
+
+
+class MinutesStatus(StrEnum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    SUPERSEDED = "superseded"  # a later draft of the same transcript was approved
+
+
+class MeetingMinutes(TenantScoped, Base):
+    """Minutes drafted from one transcript version. Only approved minutes are searchable,
+    and only while that transcript version is current (a new import makes them stale)."""
+
+    __tablename__ = "meeting_minutes"
+
+    meeting_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    transcript_version_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    status: Mapped[MinutesStatus] = mapped_column(
+        pg_enum(MinutesStatus, "minutes_status"), nullable=False
+    )
+    template: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    decisions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    action_items: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    dropped_items: Mapped[int] = mapped_column(nullable=False, server_default="0")
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    drafted_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    edited: Mapped[bool] = mapped_column(nullable=False, server_default="false")
+
+    __table_args__ = (
+        UniqueConstraint("organisation_id", "id", name="uq_meeting_minutes_org_id"),
+        ForeignKeyConstraint(
+            ["organisation_id", "meeting_id"], ["meeting.organisation_id", "meeting.id"]
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "transcript_version_id"],
+            ["document_version.organisation_id", "document_version.id"],
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "drafted_by"],
+            ["app_user.organisation_id", "app_user.id"],
+            name="fk_meeting_minutes_drafted_by",
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "decided_by"],
+            ["app_user.organisation_id", "app_user.id"],
+            name="fk_meeting_minutes_decided_by",
+        ),
+        CheckConstraint("template IN ('standard', 'brief')", name="template_known"),
+        CheckConstraint("(status = 'draft') = (decided_at IS NULL)", name="decided_unless_draft"),
+        Index("ix_meeting_minutes_meeting", "meeting_id"),
     )

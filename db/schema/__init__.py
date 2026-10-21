@@ -20,7 +20,7 @@ from db.schema.identity import (
     UserRoleGrant,
 )
 from db.schema.ingestion import ChunkRecord, IngestionJob, IngestionStatus
-from db.schema.meetings import Meeting, MeetingParticipant
+from db.schema.meetings import Meeting, MeetingMinutes, MeetingParticipant, MinutesStatus
 
 __all__ = [
     "AnswerFeedback",
@@ -41,7 +41,9 @@ __all__ = [
     "IngestionJob",
     "IngestionStatus",
     "Meeting",
+    "MeetingMinutes",
     "MeetingParticipant",
+    "MinutesStatus",
     "Organisation",
     "PermissionSubject",
     "QueryLog",

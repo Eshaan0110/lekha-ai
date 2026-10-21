@@ -49,6 +49,27 @@ export interface MeetingItem {
 
 export interface MeetingDetail extends MeetingItem {
   transcript: { at: string | null; start_ms: number | null; speaker: string | null; text: string }[];
+  you_organised: boolean;
+}
+
+export interface Minutes {
+  id: string;
+  status: "draft" | "approved" | "rejected" | "superseded";
+  summary: string;
+  decisions: { text: string; evidence: string; at: string | null }[];
+  action_items: {
+    task: string;
+    owner: string;
+    due: string;
+    evidence: string;
+    at: string | null;
+    owner_spoke: boolean | null;
+  }[];
+  dropped_items: number;
+  model: string;
+  edited: boolean;
+  current: boolean;
+  created_at: string;
 }
 
 export interface Me {
@@ -139,6 +160,18 @@ export const api = {
   meetings: (user: string) => call<MeetingItem[]>(user, "/meetings"),
 
   meeting: (user: string, id: string) => call<MeetingDetail>(user, `/meetings/${id}`),
+
+  minutes: (user: string, meetingId: string) => call<Minutes[]>(user, `/meetings/${meetingId}/minutes`),
+
+  draftMinutes: (user: string, meetingId: string) =>
+    call<Minutes>(user, `/meetings/${meetingId}/minutes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ template: "standard" }),
+    }),
+
+  decideMinutes: (user: string, minutesId: string, approve: boolean) =>
+    call<Minutes>(user, `/minutes/${minutesId}/${approve ? "approve" : "reject"}`, { method: "POST" }),
 
   importMeeting: (user: string, file: File, metadata: Record<string, unknown>) => {
     const form = new FormData();

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 
 import structlog
@@ -25,11 +25,14 @@ from db.ingestion import (
     replace_chunks,
     update_job,
 )
+from db.meetings import approved_minutes_for_version
 from db.schema import IngestionJob, IngestionStatus
 from db.tenancy import tenant_transaction
+from lekha.generation import minutes_as_text
 from lekha.ingestion import (
     Chunk,
     ExtractionError,
+    Section,
     TranscriptError,
     chunk_sections,
     chunk_transcript,
@@ -109,7 +112,14 @@ async def _extract_and_chunk(deps: PipelineDeps, target: VersionToIngest) -> lis
         except TranscriptError as exc:
             raise ExtractionError(exc.code) from None
         await _set_stage(deps, target, "chunk")
-        return chunk_transcript(segments)
+        chunks = chunk_transcript(segments)
+        async with tenant_transaction(deps.session_factory, target.organisation_id) as s:
+            minutes = await approved_minutes_for_version(s, target.version_id)
+        if minutes is not None:
+            text = minutes_as_text(minutes.summary, minutes.decisions, minutes.action_items)
+            for extra in chunk_sections([Section(("Minutes",), text)]):
+                chunks.append(replace(extra, ordinal=len(chunks)))
+        return chunks
     sections = extract_sections(target.kind, data)
     await _set_stage(deps, target, "chunk")
     return chunk_sections(sections)
