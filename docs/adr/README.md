@@ -18,5 +18,7 @@ and when we would revisit it. Statuses: **Proposed** (awaiting owner approval),
 | [0010](0010-local-backup-and-restore.md) | Local backup and restore of all three data stores | Accepted (2026-10-19) |
 | [0011](0011-idempotency-keys.md) | Idempotency-Key for write endpoints | Accepted (2026-10-19) |
 | [0012](0012-embeddings-runtime.md) | Embedding models and how they run locally (BGE-M3 via ONNX Runtime) | Accepted (2026-10-21) |
+| [0013](0013-language-models-and-grounding.md) | Language models and the grounding rules for answers | Accepted (2026-10-21) |
+| [0014](0014-hybrid-retrieval.md) | Hybrid retrieval (meaning + keywords) with reciprocal rank fusion | Accepted (2026-10-21) |
 
 Template: copy any ADR and keep every heading.

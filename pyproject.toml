@@ -70,6 +70,8 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF", "N", "SIM", "PT"]
 "tests/**" = ["S101", "S105", "S106"]
 # Generated migrations embed long SQL check-constraint expressions verbatim.
 "db/migrations/versions/**" = ["E501"]
+# The golden set is a table of hand-written facts; one policy or question per line reads best.
+"tests/eval/golden.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

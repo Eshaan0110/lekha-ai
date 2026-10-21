@@ -14,6 +14,7 @@
     ./dev.ps1 check             Format check, lint, type check, import boundaries, unit tests
     ./dev.ps1 test              Unit tests only (no Docker needed)
     ./dev.ps1 test-integration  Integration tests against the running local stack
+    ./dev.ps1 eval              Golden-set evaluation with BGE-M3 + local Ollama (slow, ~1 hour)
     ./dev.ps1 backup            Back up PostgreSQL, Qdrant and object storage to ./backups/<stamp>
     ./dev.ps1 verify-backup -From X   Check a backup folder against its checksummed manifest
     ./dev.ps1 restore -From X   Restore a backup folder (REPLACES current data; needs -Yes)
@@ -23,7 +24,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('setup', 'up', 'status', 'migrate', 'run', 'check', 'test', 'test-integration',
+    [ValidateSet('setup', 'up', 'status', 'migrate', 'run', 'check', 'test', 'test-integration', 'eval',
                  'backup', 'verify-backup', 'restore', 'logs', 'down', 'seed', 'worker', 'help')]
     [string]$Command = 'help',
     [string]$From,
@@ -165,6 +166,16 @@ try {
         'test-integration' {
             Assert-EnvFile
             Invoke-Native 'uv' @('run', '--locked', 'pytest', '-m', 'integration')
+        }
+        'eval' {
+            # Real answer quality: BGE-M3 + the local Ollama model; writes docs/eval/*.md.
+            Assert-EnvFile
+            $env:LEKHA_EVAL_EMBEDDER = 'bge-m3'
+            $env:LEKHA_EVAL_LLM = 'ollama'
+            $env:LEKHA_EVAL_REPORT = 'docs/eval/golden-ollama-bge-m3.md'
+            $env:PYTHONIOENCODING = 'utf-8'
+            Invoke-Native 'uv' @('run', '--locked', 'pytest', '-m', 'integration',
+                'tests/integration/test_golden.py', '-s')
         }
         'backup' {
             # PostgreSQL + Qdrant + object storage, with a checksummed manifest.

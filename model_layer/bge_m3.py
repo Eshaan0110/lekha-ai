@@ -41,7 +41,7 @@ _CHUNK = 8 * 1024 * 1024
 class BgeM3Embedder:
     model_name = MODEL_NAME
     dimensions = DIMENSIONS
-    min_relevance = 0.45
+    min_relevance = 0.50  # calibrated on the golden set, 2026-10-21 (see docs/eval)
 
     def __init__(self, model_dir: Path, device: str = "cpu") -> None:
         onnx_dir = model_dir / "onnx"

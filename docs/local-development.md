@@ -128,6 +128,27 @@ restart, and re-upload. Files are checked against the repository's SHA-256 at st
 `LEKHA_EMBEDDER_DEVICE=cuda` uses the GPU only if a CUDA-enabled ONNX Runtime is installed;
 otherwise it runs on the CPU and logs a warning.
 
+## Asking questions (Phase 3)
+
+`POST /api/v1/ask` answers from documents the caller may read, with verified citations, or
+says it doesn't know. It needs a language model:
+
+- **Local (development):** install [Ollama](https://ollama.com) and pull a model; this
+  laptop already has `qwen3.5:9b` (6.6 GB). In `.env`: `LEKHA_LLM=ollama`. The address must
+  be `127.0.0.1` and cloud model tags are refused, so no text leaves the machine.
+  Expect about 20–40 s per answer on the RTX 3050 (the model doesn't fit in 4 GB of VRAM).
+- **Production:** `LEKHA_LLM=bedrock` (Claude via AWS Bedrock Mumbai), blocked until the
+  AWS account exists.
+- **None** (default): `/ask` answers `503 upstream_unavailable`.
+
+```bash
+curl -H "X-Dev-User: dev|asha" -H "Content-Type: application/json" -d '{"question":"How many days of annual leave do I get?"}' http://127.0.0.1:8000/api/v1/ask
+```
+
+`/ask` is rate-limited per user (`LEKHA_ASK_RATE_LIMIT_PER_MINUTE`, default 10).
+`./dev.ps1 eval` runs the 100-question golden set with BGE-M3 and Ollama and writes
+`docs/eval/golden-ollama-bge-m3.md` (about an hour).
+
 ## Database accounts
 
 | Account | Used by | Can do |

@@ -48,6 +48,8 @@ def settings() -> Settings:
             "qdrant_collection": TEST_COLLECTION,
             # Deterministic vectors whatever the developer's .env chooses.
             "embedder": "fake",
+            # No real language model unless a test injects one (tests never call Ollama).
+            "llm": "none",
         }
     )
     asyncio.run(S3ObjectStore.from_settings(test_settings).ensure_bucket())
