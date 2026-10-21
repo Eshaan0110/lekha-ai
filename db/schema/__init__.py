@@ -10,6 +10,7 @@ from db.schema.documents import (
     DocumentVersion,
     SourceSystem,
 )
+from db.schema.glossary import GlossaryEntry, GlossaryName
 from db.schema.idempotency import IdempotencyRecord, IdempotencyState
 from db.schema.identity import (
     AppUser,
@@ -36,6 +37,8 @@ __all__ = [
     "DocumentAcl",
     "DocumentFile",
     "DocumentVersion",
+    "GlossaryEntry",
+    "GlossaryName",
     "IdempotencyRecord",
     "IdempotencyState",
     "IngestionJob",

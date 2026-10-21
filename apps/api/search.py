@@ -52,6 +52,9 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     results: list[SearchResult]
     embedding_model: str
+    also_searched: list[str] = Field(
+        default_factory=list, description="Other names of glossary terms in the query"
+    )
 
 
 class IngestionJobOut(BaseModel):
@@ -86,7 +89,9 @@ async def search(request: Request, ctx: CurrentUser, body: SearchRequest) -> Sea
         )
         for c in found.candidates
     ]
-    return SearchResponse(results=results, embedding_model=embedder.model_name)
+    return SearchResponse(
+        results=results, embedding_model=embedder.model_name, also_searched=found.also_searched
+    )
 
 
 @router.get(

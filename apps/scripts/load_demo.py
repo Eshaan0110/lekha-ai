@@ -23,7 +23,7 @@ from typing import Any
 import docx
 import httpx
 
-from apps.scripts.demo_corpus import DOCS, MEETINGS, GoldenDoc
+from apps.scripts.demo_corpus import DOCS, GLOSSARY, MEETINGS, GoldenDoc
 from lekha.auth import user_badge
 
 API = "http://127.0.0.1:8000/api/v1"
@@ -137,6 +137,25 @@ def main() -> int:
         jobs[f"meeting:{meeting.key}"] = response.json()["ingestion_job_id"]
         meetings += 1
     print(f"Imported {meetings} meetings.")
+
+    terms = 0
+    for unit, curator, shared, canonical, aliases, description in GLOSSARY:
+        response = client.post(
+            f"{API}/glossary",
+            headers=_as(curator),
+            json={
+                "business_unit_id": units[unit],
+                "canonical": canonical,
+                "aliases": list(aliases),
+                "description": description,
+                "shared": shared,
+            },
+        )
+        if response.status_code == 409:  # already loaded
+            continue
+        response.raise_for_status()
+        terms += 1
+    print(f"Added {terms} glossary entries.")
 
     deadline = time.monotonic() + WAIT_SECONDS
     pending = dict(jobs)

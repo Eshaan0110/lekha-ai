@@ -53,6 +53,7 @@ a recorded manual check proves it.
 | Meetings readable only by participants | A meeting's guest list is its participants (importer always included); unit curators who weren't present can't search, list, open or ask about it | `test_only_participants_can_find_read_or_ask_about_a_meeting` |
 | Transcript validation | UTF-8 only, ≤ 5 MB, ≤ 20,000 turns, markup stripped, unknown formats refused | `test_transcript.py`, `test_import_rules` |
 | Minutes are human-approved and grounded | Drafts are never searchable; only the organiser approves; every decision and action must quote the transcript verbatim or it is dropped; nothing is sent anywhere | `test_minutes.py`, `test_minutes_are_drafted_by_participants_and_approved_only_by_the_organiser`, `test_invented_evidence_never_reaches_the_approver` |
+| Glossary can't widen access | Entries are managed by the unit's curators and visible per unit (or shared); expansion only changes the query, every search stays permission-filtered; entry text sent to the model is neutralised | `test_glossary.py` (Ravi gets no expansion or results from Alpha's entry) |
 | Interactive API docs off outside local/test | `/docs` and `/openapi.json` disabled in staging/production | `test_interactive_docs_are_disabled_in_production` |
 
 ## Not yet implemented (Phase 1, later slices)

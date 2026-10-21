@@ -24,6 +24,17 @@ export interface AskResult {
   citations: Citation[];
   language: string;
   model: string | null;
+  also_searched: string[];
+}
+
+export interface GlossaryEntry {
+  id: string;
+  canonical: string;
+  aliases: string[];
+  description: string;
+  business_unit_id: string;
+  shared: boolean;
+  can_edit: boolean;
 }
 
 export interface Passage {
@@ -160,6 +171,17 @@ export const api = {
   meetings: (user: string) => call<MeetingItem[]>(user, "/meetings"),
 
   meeting: (user: string, id: string) => call<MeetingDetail>(user, `/meetings/${id}`),
+
+  glossary: (user: string) => call<GlossaryEntry[]>(user, "/glossary"),
+
+  addGlossary: (user: string, entry: Record<string, unknown>) =>
+    call<GlossaryEntry>(user, "/glossary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(entry),
+    }),
+
+  deleteGlossary: (user: string, id: string) => call<void>(user, `/glossary/${id}`, { method: "DELETE" }),
 
   minutes: (user: string, meetingId: string) => call<Minutes[]>(user, `/meetings/${meetingId}/minutes`),
 

@@ -65,8 +65,14 @@ def neutralise(text: str) -> str:
     return text.replace("<<<", "< < <").replace(">>>", "> > >")
 
 
-def render_user_prompt(question: str, sources: list[SourceBlock], language: str) -> str:
-    lines = ["Sources:"]
+def render_user_prompt(
+    question: str, sources: list[SourceBlock], language: str, glossary: str = ""
+) -> str:
+    """``glossary``: curator-written lines saying which names mean the same thing."""
+    lines = []
+    if glossary:
+        lines += ["Glossary (names that mean the same thing):", neutralise(glossary), ""]
+    lines.append("Sources:")
     for source in sources:
         path = " > ".join(neutralise(h) for h in source.heading_path) or "-"
         where = ""

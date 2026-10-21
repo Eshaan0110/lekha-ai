@@ -337,3 +337,54 @@ Ravi: Two extra forklifts arrive on 18 November for the loading bay.
 """,
     ),
 )
+
+
+# Synthetic glossary: (owning unit, curator, shared, canonical, aliases, description).
+# Several bridge English and Kannada, where meaning search alone was weakest.
+GLOSSARY: tuple[tuple[str, str, bool, str, tuple[str, ...], str], ...] = (
+    (
+        "bu-alpha",
+        "chitra",
+        True,
+        "Casual leave",
+        ("CL", "ಸಾಂದರ್ಭಿಕ ರಜೆ"),
+        "short leave for personal reasons",
+    ),
+    (
+        "bu-alpha",
+        "chitra",
+        True,
+        "Annual leave",
+        ("PL", "privilege leave", "EL", "earned leave", "ವಾರ್ಷಿಕ ರಜೆ"),
+        "paid yearly leave",
+    ),
+    (
+        "bu-alpha",
+        "chitra",
+        True,
+        "Induction training",
+        ("onboarding", "ಹೊಸ ನೌಕರರ ತರಬೇತಿ"),
+        "training for new employees",
+    ),
+    (
+        "bu-alpha",
+        "chitra",
+        True,
+        "Medical check-up",
+        ("health check", "ವೈದ್ಯಕೀಯ ತಪಾಸಣೆ"),
+        "annual health examination",
+    ),
+    ("bu-alpha", "chitra", True, "Bus pass", ("ಬಸ್ ಪಾಸ್",), "public transport pass"),
+    ("bu-alpha", "chitra", True, "Security helpline", ("emergency number", "ಭದ್ರತಾ ಸಹಾಯವಾಣಿ"), ""),
+    ("bu-alpha", "chitra", True, "Safety helmet", ("hard hat", "ಸುರಕ್ಷತಾ ಹೆಲ್ಮೆಟ್"), ""),
+    ("bu-alpha", "chitra", False, "Fire marshal", ("fire warden",), "person who leads evacuation"),
+    ("bu-alpha", "chitra", False, "Hot desk", ("shared desk", "flexi desk"), ""),
+    (
+        "bu-beta",
+        "bina",
+        False,
+        "Beta plant",
+        ("Beta factory", "Beta unit"),
+        "the Beta manufacturing site",
+    ),
+)

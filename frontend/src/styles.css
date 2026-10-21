@@ -213,6 +213,10 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 0
 .minutes-card ul { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; }
 .quote.block { display: block; font-size: 0.85rem; }
 
+.aliases { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; margin-left: 0.5rem; }
+.glossary li { align-items: flex-start; }
+.also { margin: 0.6rem 0 0; }
+
 @media (max-width: 640px) {
   .topbar { gap: 0.75rem; }
   .who { margin-left: 0; width: 100%; }

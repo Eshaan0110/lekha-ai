@@ -41,6 +41,7 @@ Claude on AWS (a few seconds per answer) once the AWS account exists.
 | 9 | **Asha** asks in Kannada: *ಪ್ರತಿ ವರ್ಷ ಎಷ್ಟು ದಿನಗಳ ಸಾಂದರ್ಭಿಕ ರಜೆ ಸಿಗುತ್ತದೆ?* | "Kannada questions and documents work; Hindi is planned." |
 | 10 | **Asha** → Meetings: open *Weekly safety review*; then Ask *"By when must forklift drivers be retrained?"* | "Meetings are memory too. The answer cites the meeting and the exact moment, 12:40. Only the people who were there can see it." |
 | 10b | In the safety review, **Draft minutes**, then **Approve** (Asha organised it) | "Lekha drafts minutes, but a person approves them. Every decision and action quotes the transcript, and it leaves owners blank rather than guess. Drafting takes about 2 minutes locally." |
+| 10c | **Asha** asks *"How many days of casual leave do employees get each year?"*, then opens **Glossary** | "The policy only exists in Kannada. The glossary links 'casual leave' with 'ಸಾಂದರ್ಭಿಕ ರಜೆ', so the English question finds it: 'Also searched for…'. Curators maintain these terms." |
 | 11 | **Chitra** → Meetings | "Chitra curates Alpha's documents, but she wasn't in these meetings, so she sees none of them." |
 | 12 | **Chitra** → Documents → upload a Word file, share with Asha | "Curators upload policies; they become searchable in about a minute, with permissions attached." |
 

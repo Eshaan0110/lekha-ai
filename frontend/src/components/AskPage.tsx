@@ -225,6 +225,9 @@ function Answer({
           </li>
         ))}
       </ul>
+      {result.also_searched.length > 0 && (
+        <p className="muted small also">Also searched for: {result.also_searched.join(", ")}</p>
+      )}
       <div className="feedback">
         <span className="muted small">Was this helpful?</span>
         <button className={rated === true ? "pill on" : "pill"} onClick={() => void rate(true)}>

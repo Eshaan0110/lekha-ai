@@ -27,6 +27,7 @@ _TARGET_PARAMS = {
     "query_id": "query_log",
     "meeting_id": "meeting",
     "minutes_id": "meeting_minutes",
+    "entry_id": "glossary_entry",
 }
 
 

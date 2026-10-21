@@ -47,6 +47,7 @@ from lekha.generation import (
     verify,
 )
 from lekha.ingestion import Language, detect_language, moment_of_quote
+from lekha.memory import glossary_note
 from model_layer import Embedder, LanguageModel, LanguageModelError, LlmRequest, LlmResponse
 
 logger = structlog.get_logger("lekha.ask")
@@ -85,6 +86,9 @@ class AskResponse(BaseModel):
     citations: list[CitationOut]
     language: str
     model: str | None
+    also_searched: list[str] = Field(
+        default_factory=list, description="Other names of glossary terms in the question"
+    )
 
 
 Progress = Callable[[str, dict[str, Any]], Awaitable[None]]  # Any: small JSON event payloads
@@ -208,7 +212,9 @@ async def _answer(
     elif not evidence_is_sufficient(found.best_dense_score, min_relevance):
         outcome = Outcome(None, (), AbstentionReason.WEAK_EVIDENCE)
     else:
-        user_prompt = render_user_prompt(question, sources, language)
+        user_prompt = render_user_prompt(
+            question, sources, language, glossary_note(found.expansions)
+        )
         prompt_sha256 = hashlib.sha256(f"{SYSTEM_PROMPT}\n{user_prompt}".encode()).digest()
         await progress("writing", {})
         try:
@@ -283,6 +289,7 @@ async def _answer(
         ],
         language=language,
         model=llm_reply.model if llm_reply else None,
+        also_searched=found.also_searched,
     )
 
 

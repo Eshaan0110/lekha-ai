@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { AskPage } from "./components/AskPage";
 import { DocumentsPage } from "./components/DocumentsPage";
+import { GlossaryPage } from "./components/GlossaryPage";
 import { MeetingsPage } from "./components/MeetingsPage";
 import { SignIn } from "./components/SignIn";
 import { PERSONAS } from "./personas";
 
-type Tab = "ask" | "documents" | "meetings";
+type Tab = "ask" | "documents" | "meetings" | "glossary";
 
 function remembered(): string | null {
   try {
@@ -54,6 +55,9 @@ export function App() {
           <button className={tab === "meetings" ? "tab active" : "tab"} onClick={() => setTab("meetings")}>
             Meetings
           </button>
+          <button className={tab === "glossary" ? "tab active" : "tab"} onClick={() => setTab("glossary")}>
+            Glossary
+          </button>
         </nav>
         <div className="who">
           <span className="who-name">{persona.name}</span>
@@ -68,6 +72,7 @@ export function App() {
         {tab === "ask" && <AskPage key={user} user={user} />}
         {tab === "documents" && <DocumentsPage key={user} user={user} />}
         {tab === "meetings" && <MeetingsPage key={user} user={user} />}
+        {tab === "glossary" && <GlossaryPage key={user} user={user} />}
       </main>
     </div>
   );

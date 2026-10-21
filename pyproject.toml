@@ -123,7 +123,7 @@ forbidden_modules = ["db", "apps", "sqlalchemy", "fastapi", "starlette", "asyncp
 [[tool.importlinter.contracts]]
 name = "Upload validation and storage interface stay pure (no S3 SDK, DB or web framework)"
 type = "forbidden"
-source_modules = ["lekha.memory.files", "lekha.memory.storage"]
+source_modules = ["lekha.memory.files", "lekha.memory.storage", "lekha.memory.glossary"]
 forbidden_modules = ["db", "apps", "sqlalchemy", "fastapi", "starlette", "boto3", "botocore"]
 
 [[tool.importlinter.contracts]]
