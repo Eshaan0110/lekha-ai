@@ -15,6 +15,9 @@
     ./dev.ps1 test              Unit tests only (no Docker needed)
     ./dev.ps1 test-integration  Integration tests against the running local stack
     ./dev.ps1 eval              Golden-set evaluation with BGE-M3 + local Ollama (slow, ~1 hour)
+    ./dev.ps1 web               Run the web app on http://127.0.0.1:5173 (API must be running)
+    ./dev.ps1 web-check         Type-check and unit-test the web app
+    ./dev.ps1 demo-load         Load the synthetic demo documents (API and worker running)
     ./dev.ps1 backup            Back up PostgreSQL, Qdrant and object storage to ./backups/<stamp>
     ./dev.ps1 verify-backup -From X   Check a backup folder against its checksummed manifest
     ./dev.ps1 restore -From X   Restore a backup folder (REPLACES current data; needs -Yes)
@@ -24,7 +27,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('setup', 'up', 'status', 'migrate', 'run', 'check', 'test', 'test-integration', 'eval',
+    [ValidateSet('setup', 'up', 'status', 'migrate', 'run', 'check', 'test', 'test-integration', 'eval', 'web', 'web-check', 'demo-load',
                  'backup', 'verify-backup', 'restore', 'logs', 'down', 'seed', 'worker', 'help')]
     [string]$Command = 'help',
     [string]$From,
@@ -166,6 +169,17 @@ try {
         'test-integration' {
             Assert-EnvFile
             Invoke-Native 'uv' @('run', '--locked', 'pytest', '-m', 'integration')
+        }
+        'web' {
+            Invoke-Native 'npm' @('--prefix', 'frontend', 'run', 'dev')
+        }
+        'web-check' {
+            Invoke-Native 'npm' @('--prefix', 'frontend', 'run', 'typecheck')
+            Invoke-Native 'npm' @('--prefix', 'frontend', 'test')
+        }
+        'demo-load' {
+            $env:PYTHONIOENCODING = 'utf-8'
+            Invoke-Native 'uv' @('run', '--locked', 'python', '-m', 'apps.scripts.load_demo')
         }
         'eval' {
             # Real answer quality: BGE-M3 + the local Ollama model; writes docs/eval/*.md.

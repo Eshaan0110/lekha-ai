@@ -46,6 +46,8 @@ lekha/retrieval/     Permission filter from AuthContext; Qdrant adapter with the
 model_layer/         Language-model interface (Ollama local, Bedrock); embedder interface; fake embedder (simulation); all-MiniLM-L6-v2 (real, English, numpy); BGE-M3 (ONNX Runtime)
 apps/api/idempotency.py, db/idempotency.py  Idempotency-Key: claim, replay, complete, release
 apps/api/routes_v1.py  /api/v1/me, /api/v1/documents (cursor paging), /api/v1/documents/{id}
+frontend/            React + TypeScript web app (Vite dev server proxies /api to the API)
+apps/scripts/demo_corpus.py, load_demo.py  Synthetic demo corpus and its loader (through the API)
 tests/unit/          Fast tests, no Docker required
 tests/integration/   Tests against the real local Docker stack
 infra/local/         Docker Compose for the local stack
@@ -125,6 +127,9 @@ request ID, and turned into a generic `500 internal_error` envelope.
 | `GET /api/v1/documents/{id}` | One document; `404` if missing **or** not visible | Signed in |
 | `POST /api/v1/search` | Permission-filtered search by meaning (`query`, `limit`) | Signed in |
 | `POST /api/v1/ask` | Grounded answer with verified citations, or an abstention with its reason; rate-limited per user | Signed in |
+| `POST /api/v1/ask/stream` | Same as `/ask`, with progress events (server-sent events); the answer is sent only after its citations are verified | Signed in |
+| `GET /api/v1/chunks/{id}` | The full source passage behind a citation; `404` if not readable | Signed in |
+| `POST /api/v1/answers/{query_id}/feedback` | Helpful / not helpful (+ comment); only the asker | Signed in |
 | `GET /api/v1/ingestion-jobs/{id}` | Processing status of an upload | Curator of the unit, or a reader of the document |
 | `POST /api/v1/documents` | Upload a PDF/DOCX (multipart `file` + `metadata` JSON); an existing `canonical_key` adds a new version; optional `Idempotency-Key` header for safe retries | Curator in the business unit |
 | `POST /api/v1/deletion-requests` | Delete a document: hidden at once, derived data purged by the worker | Curator of the document's unit, cleared for it |

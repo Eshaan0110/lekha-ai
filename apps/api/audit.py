@@ -23,6 +23,8 @@ _TARGET_PARAMS = {
     "document_id": "document",
     "job_id": "ingestion_job",
     "request_id": "deletion_request",
+    "chunk_id": "chunk",
+    "query_id": "query_log",
 }
 
 

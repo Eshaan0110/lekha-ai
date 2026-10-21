@@ -97,7 +97,15 @@ be downloaded; it understands English only, so Kannada search waits for BGE-M3.
 
 ## Phase 4 — Daily-use companion (local, synthetic data only)
 
-Owner said go ahead (2026-10-21). Plan proposed: [design/phase-4-plan.md](design/phase-4-plan.md), waiting for decisions D1–D6. Nothing built yet. The real 20-user pilot stays blocked on Phase 0.
+Owner said go ahead (2026-10-21). Plan approved with the recommended D1–D6: [design/phase-4-plan.md](design/phase-4-plan.md). Building.
+
+| Step | Status | Evidence |
+|---|---|---|
+| 1. Demo web app (React + TypeScript + Vite) | Tested | `frontend/`: persona sign-in, Ask with live progress (`POST /api/v1/ask/stream`, progress only, answer sent after verification), clickable citations → source passage (`GET /api/v1/chunks/{id}`, same access rule), feedback (`POST /api/v1/answers/{id}/feedback`, migration 0009), documents list and curator upload; `logic.test.ts` (6), `test_ask.py` (+5); live run in the browser with BGE-M3 + qwen3.5:9b: cited answers in 30–41 s warm, permission refusals in < 1 s; [demo-script.md](demo-script.md) |
+| 2. Meeting import | Not started | |
+| 3. Minutes with approval | Not started | |
+| 4. Glossary | Not started | |
+| 5. Pilot support | Not started | | The real 20-user pilot stays blocked on Phase 0.
 
 ## Phases 5–7
 

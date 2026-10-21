@@ -1,6 +1,7 @@
 # Phase 4 plan: daily-use companion (proposal)
 
-- **Status:** Proposed. Waiting for the owner's decisions D1–D6 below.
+- **Status:** Approved by the owner on 2026-10-21 with the recommended D1–D6 (React + Vite;
+  local model with live progress; file imports; audio and connectors deferred; minimal admin).
 - **Date:** 2026-10-21
 - **Scope:** local, **synthetic data only**. The owner said "go ahead" on 2026-10-21. A real
   20-user pilot is out of reach until Phase 0 delivers SSO, the AWS account and the real-data

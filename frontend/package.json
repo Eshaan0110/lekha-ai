@@ -1,0 +1,25 @@
+{
+  "name": "lekha-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Lekha web app (Phase 4 demo). Talks to the API at /api/v1 through the Vite dev proxy.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p . && vite build",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.3",
+    "vitest": "5.0.3"
+  }
+}

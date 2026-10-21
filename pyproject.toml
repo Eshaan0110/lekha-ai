@@ -72,6 +72,7 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "RUF", "N", "SIM", "PT"]
 "db/migrations/versions/**" = ["E501"]
 # The golden set is a table of hand-written facts; one policy or question per line reads best.
 "tests/eval/golden.py" = ["E501"]
+"apps/scripts/demo_corpus.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

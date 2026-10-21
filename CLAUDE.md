@@ -600,6 +600,7 @@ adapter with stubbed tests, UI deferred, 100-question golden set). Build work is
 the Phase 3 report is written ([`docs/reports/phase-3-report.md`](docs/reports/phase-3-report.md)):
 all quality and security targets met on the synthetic golden set, p95 latency not met on the
 laptop. Owner said go ahead with Phase 4 (2026-10-21); the Phase 4 plan
-([`docs/design/phase-4-plan.md`](docs/design/phase-4-plan.md)) is proposed and must be approved
-before building. Commit rule: one commit per finished piece of
+([`docs/design/phase-4-plan.md`](docs/design/phase-4-plan.md)) is approved with the recommended
+D1–D6 (React + Vite, local model with live progress, file imports, audio and connectors
+deferred, minimal admin). Building the demo web app first. Commit rule: one commit per finished piece of
 work, push only when the owner says.

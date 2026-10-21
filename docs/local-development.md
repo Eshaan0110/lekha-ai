@@ -149,6 +149,18 @@ curl -H "X-Dev-User: dev|asha" -H "Content-Type: application/json" -d '{"questio
 `./dev.ps1 eval` runs the 100-question golden set with BGE-M3 and Ollama and writes
 `docs/eval/golden-ollama-bge-m3.md` (about an hour).
 
+## Web app (Phase 4 demo)
+
+```powershell
+./dev.ps1 web          # http://127.0.0.1:5173 (the API must be running)
+./dev.ps1 web-check    # type-check + unit tests
+./dev.ps1 demo-load    # load 42 synthetic policies (API and worker running)
+```
+
+Node.js 24 is required. `frontend/.npmrc` pins every package to a release published before a
+cut-off date (like uv's `exclude-newer`), with one documented security exception (Vite).
+The leadership walkthrough is in [demo-script.md](demo-script.md).
+
 ## Database accounts
 
 | Account | Used by | Can do |

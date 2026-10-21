@@ -326,3 +326,109 @@ def test_a_kannada_question_gets_a_kannada_abstention(client: TestClient) -> Non
     body = _ask(client, "nobody", "ವಾರ್ಷಿಕ ರಜೆ ಎಷ್ಟು ದಿನ?").json()
     assert body["language"] == "kn"
     assert body["answer"].startswith("ಇದಕ್ಕೆ")
+
+
+# --- demo app support: progress stream, source passages, feedback -----------------
+
+
+def _events(raw: str) -> list[tuple[str, dict[str, Any]]]:
+    events = []
+    for block in raw.strip().split("\n\n"):
+        lines = dict(line.split(": ", 1) for line in block.splitlines())
+        events.append((lines["event"], json.loads(lines["data"])))
+    return events
+
+
+async def test_the_stream_shows_progress_then_the_verified_answer(
+    client: TestClient, org: SeedResult, deps: PipelineDeps
+) -> None:
+    await _publish(client, org, deps, LEAVE, ["asha"])
+    response = client.post(
+        "/api/v1/ask/stream",
+        headers={"X-Dev-User": "dev|asha"},
+        json={"question": "How many days of annual leave do employees receive?"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = _events(response.text)
+    stages = [data["stage"] for name, data in events if name == "stage"]
+    assert stages == ["received", "searching", "sources", "writing", "checking"]
+    name, answer = events[-1]
+    assert name == "answer"
+    assert answer["abstained"] is False
+    assert "twenty days" in answer["citations"][0]["span"]
+    # Only progress is streamed before the end: no answer text appears in any stage event.
+    assert all("twenty" not in json.dumps(data) for n, data in events if n == "stage")
+
+
+async def test_a_model_outage_mid_stream_is_an_error_event(
+    client: TestClient, org: SeedResult, deps: PipelineDeps, model: FakeLanguageModel
+) -> None:
+    await _publish(client, org, deps, LEAVE, ["asha"])
+    model.behaviour = Behaviour.DOWN
+    response = client.post(
+        "/api/v1/ask/stream",
+        headers={"X-Dev-User": "dev|asha"},
+        json={"question": "How many days of annual leave do employees receive?"},
+    )
+    name, data = _events(response.text)[-1]
+    assert (name, data["code"]) == ("error", "upstream_unavailable")
+
+
+def test_the_stream_refuses_before_starting_when_limited(
+    settings: Settings, org: SeedResult
+) -> None:
+    app = create_app(
+        _app_settings(settings, org),
+        job_queue=NullQueue(),
+        language_model=FakeLanguageModel(),
+        ask_limiter=DenyAll(),
+    )
+    with TestClient(app) as test_client:
+        response = test_client.post(
+            "/api/v1/ask/stream", headers={"X-Dev-User": "dev|asha"}, json={"question": "hi"}
+        )
+    assert response.status_code == 429
+
+
+async def test_a_citation_opens_its_source_passage_only_for_readers(
+    client: TestClient, org: SeedResult, deps: PipelineDeps
+) -> None:
+    leave = await _publish(client, org, deps, LEAVE, ["asha"])
+    body = _ask(client, "asha", "How many days of annual leave do employees receive?").json()
+    chunk_id = body["citations"][0]["chunk_id"]
+    passage = client.get(f"/api/v1/chunks/{chunk_id}", headers={"X-Dev-User": "dev|asha"})
+    assert passage.status_code == 200
+    assert passage.json()["document_id"] == leave["document_id"]
+    assert "twenty days of paid annual leave" in passage.json()["text"]
+    for user in ("ravi", "meera", "nobody"):
+        hidden = client.get(f"/api/v1/chunks/{chunk_id}", headers={"X-Dev-User": f"dev|{user}"})
+        assert hidden.status_code == 404, user
+
+
+async def test_only_the_asker_rates_an_answer_and_a_new_rating_replaces_the_old(
+    client: TestClient, org: SeedResult, deps: PipelineDeps, owner_engine: AsyncEngine
+) -> None:
+    await _publish(client, org, deps, LEAVE, ["asha", "meera"])
+    query_id = _ask(client, "asha", "How many days of annual leave do employees receive?").json()[
+        "query_id"
+    ]
+    url = f"/api/v1/answers/{query_id}/feedback"
+    assert (
+        client.post(url, headers={"X-Dev-User": "dev|asha"}, json={"helpful": True}).status_code
+        == 204
+    )
+    again = client.post(
+        url, headers={"X-Dev-User": "dev|asha"}, json={"helpful": False, "comment": "Too short"}
+    )
+    assert again.status_code == 204
+    stranger = client.post(url, headers={"X-Dev-User": "dev|meera"}, json={"helpful": False})
+    assert stranger.status_code == 404
+    async with owner_engine.connect() as conn:
+        rows = (
+            await conn.execute(
+                text("SELECT helpful, comment FROM answer_feedback WHERE query_log_id = :q"),
+                {"q": query_id},
+            )
+        ).all()
+    assert [tuple(r) for r in rows] == [(False, "Too short")]

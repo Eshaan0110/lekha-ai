@@ -57,6 +57,7 @@ async def test_ollama_sends_a_deterministic_structured_local_request() -> None:
     ]
     assert seen["format"] == REQUEST.json_schema
     assert seen["stream"] is False
+    assert seen["keep_alive"] == "30m"
     assert seen["options"]["temperature"] == 0
     assert seen["options"]["num_predict"] == 200
     assert (response.text, response.input_tokens, response.output_tokens) == (

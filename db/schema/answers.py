@@ -100,3 +100,25 @@ class Citation(TenantScoped, Base):
         ),
         CheckConstraint("source_number > 0", name="source_number_positive"),
     )
+
+
+class AnswerFeedback(TenantScoped, Base):
+    """Was this answer helpful? One verdict per question, from the person who asked it."""
+
+    __tablename__ = "answer_feedback"
+
+    query_log_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    helpful: Mapped[bool] = mapped_column(nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("query_log_id", name="uq_answer_feedback_query"),
+        ForeignKeyConstraint(
+            ["organisation_id", "query_log_id"], ["query_log.organisation_id", "query_log.id"]
+        ),
+        ForeignKeyConstraint(
+            ["organisation_id", "user_id"], ["app_user.organisation_id", "app_user.id"]
+        ),
+        CheckConstraint("comment IS NULL OR char_length(comment) <= 1000", name="comment_length"),
+    )

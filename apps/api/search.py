@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from apps.api.auth import CurrentUser, require_auth_context
 from apps.api.retrieval import retrieve
-from db.ingestion import visible_job
+from db.ingestion import readable_chunks, visible_job
 from db.schema import IngestionStatus
 from db.tenancy import tenant_transaction
 from model_layer import Embedder
@@ -98,3 +98,38 @@ async def get_ingestion_job(
         if job is None:
             raise HTTPException(status_code=404, detail="Not found.")
         return IngestionJobOut.model_validate(job, from_attributes=True)
+
+
+class ChunkOut(BaseModel):
+    chunk_id: uuid.UUID
+    document_id: uuid.UUID
+    version_id: uuid.UUID
+    version_number: int
+    title: str
+    heading_path: list[str]
+    language: str
+    text: str
+
+
+@router.get(
+    "/chunks/{chunk_id}",
+    response_model=ChunkOut,
+    responses={404: {"description": "Not found, not current, or not visible to the caller"}},
+)
+async def get_chunk(request: Request, ctx: CurrentUser, chunk_id: uuid.UUID) -> ChunkOut:
+    """The full source passage behind a citation, under the same access rule as search."""
+    async with tenant_transaction(request.app.state.session_factory, ctx.organisation_id) as s:
+        found = await readable_chunks(s, ctx, [chunk_id], now=datetime.now(UTC))
+    chunk = found.get(chunk_id)
+    if chunk is None:
+        raise HTTPException(status_code=404, detail="Not found.")
+    return ChunkOut(
+        chunk_id=chunk.chunk_id,
+        document_id=chunk.document_id,
+        version_id=chunk.version_id,
+        version_number=chunk.version_number,
+        title=chunk.title,
+        heading_path=list(chunk.heading_path),
+        language=chunk.language,
+        text=chunk.text,
+    )

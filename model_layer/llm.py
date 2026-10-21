@@ -78,6 +78,7 @@ class OllamaModel:
             ],
             "stream": False,
             "think": False,  # answer directly; hidden reasoning only costs time locally
+            "keep_alive": "30m",  # stay loaded between questions (reloading takes ~30 s)
             "options": {
                 "temperature": 0,
                 "num_predict": request.max_output_tokens,

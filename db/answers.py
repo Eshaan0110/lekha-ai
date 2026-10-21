@@ -8,9 +8,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import delete, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from db.schema import AnswerLog, Citation, DocumentVersion, QueryLog
+from db.schema import AnswerFeedback, AnswerLog, Citation, DocumentVersion, QueryLog
 
 
 async def record_query(
@@ -113,3 +114,32 @@ async def redact_answers_citing(
         update(AnswerLog).where(AnswerLog.id.in_(answer_ids)).values(answer=None, redacted_at=now)
     )
     return len(answer_ids)
+
+
+async def record_feedback(
+    session: AsyncSession,
+    *,
+    organisation_id: uuid.UUID,
+    user_id: uuid.UUID,
+    query_id: uuid.UUID,
+    helpful: bool,
+    comment: str | None,
+) -> bool:
+    """Save (or replace) the asker's verdict. False if the question isn't theirs."""
+    owner = await session.scalar(select(QueryLog.user_id).where(QueryLog.id == query_id))
+    if owner != user_id:
+        return False
+    statement = pg_insert(AnswerFeedback).values(
+        organisation_id=organisation_id,
+        query_log_id=query_id,
+        user_id=user_id,
+        helpful=helpful,
+        comment=comment,
+    )
+    await session.execute(
+        statement.on_conflict_do_update(
+            constraint="uq_answer_feedback_query",
+            set_={"helpful": statement.excluded.helpful, "comment": statement.excluded.comment},
+        )
+    )
+    return True

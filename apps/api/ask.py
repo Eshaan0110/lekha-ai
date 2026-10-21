@@ -14,18 +14,24 @@ Flow (plan "Retrieval" steps a-n):
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import json
 import time
 import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.api.auth import CurrentUser, require_auth_context
 from apps.api.ratelimit import RateLimiter, RateLimiterUnavailableError
 from apps.api.retrieval import Retrieved, retrieve
-from db.answers import AnswerRecord, CitationRecord, record_answer, record_query
+from db.answers import AnswerRecord, CitationRecord, record_answer, record_feedback, record_query
 from db.tenancy import tenant_transaction
 from lekha.auth import AuthContext
 from lekha.generation import (
@@ -79,6 +85,43 @@ class AskResponse(BaseModel):
     model: str | None
 
 
+Progress = Callable[[str, dict[str, Any]], Awaitable[None]]  # Any: small JSON event payloads
+
+
+async def _no_progress(stage: str, data: dict[str, Any]) -> None:
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class _Prepared:
+    model: LanguageModel
+    language: str
+    query_id: uuid.UUID
+    rate_headers: dict[str, str]
+    started: float
+
+
+async def _prepare(request: Request, ctx: AuthContext, question: str) -> _Prepared:
+    """Checks that must pass before anything is streamed, then the query_log row."""
+    started = time.monotonic()
+    model: LanguageModel | None = request.app.state.language_model
+    if model is None:
+        raise HTTPException(status_code=503, detail="No answer model is configured.")
+    rate_headers = await _check_rate_limit(request, ctx)
+    detected = detect_language(question)
+    language = Language.ENGLISH.value if detected is Language.UNKNOWN else detected.value
+    async with tenant_transaction(request.app.state.session_factory, ctx.organisation_id) as s:
+        query_id = await record_query(
+            s,
+            organisation_id=ctx.organisation_id,
+            user_id=ctx.user_id,
+            question=question,
+            language=language,
+        )
+    request.scope.setdefault("state", {})["audit_target"] = ("query_log", str(query_id))
+    return _Prepared(model, language, query_id, rate_headers, started)
+
+
 @router.post(
     "/ask",
     response_model=AskResponse,
@@ -90,28 +133,69 @@ class AskResponse(BaseModel):
 async def ask(
     request: Request, response: Response, ctx: CurrentUser, body: AskRequest
 ) -> AskResponse:
-    started = time.monotonic()
-    model: LanguageModel | None = request.app.state.language_model
-    if model is None:
-        raise HTTPException(status_code=503, detail="No answer model is configured.")
-    await _check_rate_limit(request, response, ctx)
-    detected = detect_language(body.question)
-    language = Language.ENGLISH.value if detected is Language.UNKNOWN else detected.value
+    prepared = await _prepare(request, ctx, body.question)
+    response.headers.update(prepared.rate_headers)
+    try:
+        return await _answer(request, ctx, body.question, prepared, _no_progress)
+    except LanguageModelError:
+        raise HTTPException(status_code=503, detail="The answer model is unavailable.") from None
 
-    session_factory = request.app.state.session_factory
-    async with tenant_transaction(session_factory, ctx.organisation_id) as s:
-        query_id = await record_query(
-            s,
-            organisation_id=ctx.organisation_id,
-            user_id=ctx.user_id,
-            question=body.question,
-            language=language,
-        )
-    request.scope.setdefault("state", {})["audit_target"] = ("query_log", str(query_id))
 
+@router.post(
+    "/ask/stream",
+    responses={
+        200: {"description": "Server-sent events: stage, answer, or error"},
+        429: {"description": "Too many questions this minute"},
+        503: {"description": "No answer model configured"},
+    },
+)
+async def ask_stream(request: Request, ctx: CurrentUser, body: AskRequest) -> StreamingResponse:
+    """Same answer as /ask, with progress events while it is prepared. Only progress is
+    streamed: the answer text is sent once, after its citations are verified."""
+    prepared = await _prepare(request, ctx, body.question)
+    events: asyncio.Queue[str | None] = asyncio.Queue()
+
+    async def progress(stage: str, data: dict[str, Any]) -> None:
+        await events.put(_sse("stage", {"stage": stage, **data}))
+
+    async def produce() -> None:
+        try:
+            result = await _answer(request, ctx, body.question, prepared, progress)
+            await events.put(_sse("answer", result.model_dump(mode="json")))
+        except LanguageModelError:
+            unavailable = {
+                "code": "upstream_unavailable",
+                "message": "The answer model is unavailable.",
+            }
+            await events.put(_sse("error", unavailable))
+        finally:
+            await events.put(None)
+
+    task = asyncio.create_task(produce())
+
+    async def stream() -> AsyncIterator[str]:
+        yield _sse("stage", {"stage": "received", "query_id": str(prepared.query_id)})
+        while (event := await events.get()) is not None:
+            yield event
+        await task  # surfaces unexpected errors to the server log
+
+    headers = {**prepared.rate_headers, "Cache-Control": "no-store", "X-Accel-Buffering": "no"}
+    return StreamingResponse(stream(), media_type="text/event-stream", headers=headers)
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def _answer(
+    request: Request, ctx: AuthContext, question: str, prepared: _Prepared, progress: Progress
+) -> AskResponse:
     settings = request.app.state.settings
-    found = await retrieve(request, ctx, body.question, limit=settings.ask_top_k)
+    model, language = prepared.model, prepared.language
+    await progress("searching", {})
+    found = await retrieve(request, ctx, question, limit=settings.ask_top_k)
     sources = _sources(found)
+    await progress("sources", {"count": len(sources)})
     llm_reply: LlmResponse | None = None
     prompt_sha256: bytes | None = None
     embedder: Embedder = request.app.state.embedder
@@ -122,8 +206,9 @@ async def ask(
     elif not evidence_is_sufficient(found.best_dense_score, min_relevance):
         outcome = Outcome(None, (), AbstentionReason.WEAK_EVIDENCE)
     else:
-        user_prompt = render_user_prompt(body.question, sources, language)
+        user_prompt = render_user_prompt(question, sources, language)
         prompt_sha256 = hashlib.sha256(f"{SYSTEM_PROMPT}\n{user_prompt}".encode()).digest()
+        await progress("writing", {})
         try:
             llm_reply = await model.generate(
                 LlmRequest(
@@ -135,9 +220,8 @@ async def ask(
             )
         except LanguageModelError:
             logger.warning("answer_model_unavailable", model=model.model_name)
-            raise HTTPException(
-                status_code=503, detail="The answer model is unavailable."
-            ) from None
+            raise
+        await progress("checking", {})
         parsed = parse_model_output(llm_reply.text)
         outcome = (
             Outcome(None, (), AbstentionReason.INVALID_MODEL_OUTPUT)
@@ -145,12 +229,12 @@ async def ask(
             else verify(parsed, sources)
         )
 
-    latency_ms = int((time.monotonic() - started) * 1000)
-    async with tenant_transaction(session_factory, ctx.organisation_id) as s:
+    latency_ms = int((time.monotonic() - prepared.started) * 1000)
+    async with tenant_transaction(request.app.state.session_factory, ctx.organisation_id) as s:
         await record_answer(
             s,
             ctx.organisation_id,
-            query_id,
+            prepared.query_id,
             AnswerRecord(
                 model=llm_reply.model if llm_reply else None,
                 prompt_sha256=prompt_sha256,
@@ -176,7 +260,7 @@ async def ask(
         latency_ms=latency_ms,
     )
     return AskResponse(
-        query_id=query_id,
+        query_id=prepared.query_id,
         answer=outcome.answer or abstain_message(language),
         abstained=outcome.abstention is not None,
         abstention_reason=outcome.abstention,
@@ -215,7 +299,7 @@ def _sources(found: Retrieved) -> list[SourceBlock]:
     ]
 
 
-async def _check_rate_limit(request: Request, response: Response, ctx: AuthContext) -> None:
+async def _check_rate_limit(request: Request, ctx: AuthContext) -> dict[str, str]:
     limiter: RateLimiter = request.app.state.ask_limiter
     try:
         decision = await limiter.hit("ask", ctx.user_id)
@@ -232,4 +316,35 @@ async def _check_rate_limit(request: Request, response: Response, ctx: AuthConte
             detail="Too many questions; please wait a moment.",
             headers={**headers, "Retry-After": str(decision.retry_after)},
         )
-    response.headers.update(headers)
+    return headers
+
+
+class FeedbackIn(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    helpful: bool
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+@router.post(
+    "/answers/{query_id}/feedback",
+    status_code=204,
+    responses={404: {"description": "No such question, or it was asked by someone else"}},
+)
+async def give_feedback(
+    request: Request, ctx: CurrentUser, query_id: uuid.UUID, body: FeedbackIn
+) -> Response:
+    """Was the answer helpful? Only the person who asked may say; a repeat replaces it."""
+    async with tenant_transaction(request.app.state.session_factory, ctx.organisation_id) as s:
+        saved = await record_feedback(
+            s,
+            organisation_id=ctx.organisation_id,
+            user_id=ctx.user_id,
+            query_id=query_id,
+            helpful=body.helpful,
+            comment=body.comment or None,
+        )
+    if not saved:
+        raise HTTPException(status_code=404, detail="Not found.")
+    request.scope.setdefault("state", {})["audit_target"] = ("query_log", str(query_id))
+    return Response(status_code=204)
