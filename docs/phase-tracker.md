@@ -87,6 +87,14 @@ be downloaded; it understands English only, so Kannada search waits for BGE-M3.
 
 Owner GO 2026-10-21. Plan approved with the recommended D1–D6: [design/phase-3-plan.md](design/phase-3-plan.md). Building.
 
+| Step | Status | Evidence |
+|---|---|---|
+| 1. Model layer (LLM interface, Ollama, Bedrock) | Tested | `test_llm_adapters.py` (Ollama via fake server; Bedrock via botocore Stubber, never live); config guards in `test_config.py` |
+| 2. Generation core (fenced prompt, citation verifier, abstention) | Tested | `test_generation.py`; import contract keeps `lekha.generation` pure |
+| 3. Hybrid retrieval (Postgres full-text + RRF) | Tested | Migration 0007; `test_keyword_search_finds_exact_codes_and_obeys_permissions`; red team still 0 anomalies; BGE-M3 exact-code recall 87% → **100%** with hybrid |
+| 4. `/api/v1/ask`, logs, rate limit | Not started | |
+| 5. Golden set and evaluation | Not started | |
+
 ## Phases 4–7
 
 

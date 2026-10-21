@@ -9,6 +9,7 @@ from lekha.retrieval.filters import (
     build_permission_filter,
     filter_is_permission_scoped,
 )
+from lekha.retrieval.fusion import RRF_K, reciprocal_rank_fusion
 from lekha.retrieval.qdrant_index import (
     Hit,
     IndexedPoint,
@@ -19,6 +20,7 @@ from lekha.retrieval.qdrant_index import (
 
 __all__ = [
     "MANDATORY_KEYS",
+    "RRF_K",
     "Hit",
     "IndexedPoint",
     "NoSearchableScopeError",
@@ -27,4 +29,5 @@ __all__ = [
     "VectorIndexError",
     "build_permission_filter",
     "filter_is_permission_scoped",
+    "reciprocal_rank_fusion",
 ]

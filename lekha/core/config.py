@@ -89,6 +89,9 @@ class Settings(BaseSettings):
     embedder_model_dir: Path = Path("models/bge-m3")
     minilm_model_dir: Path = Path("models/all-MiniLM-L6-v2")
     embedder_device: Literal["cpu", "cuda"] = "cpu"
+    # "hybrid" adds keyword search to meaning search (plan ADR-008); "dense" is kept so the
+    # golden set can measure the difference.
+    retrieval_mode: Literal["dense", "hybrid"] = "hybrid"
 
     # Language model for answers (Phase 3). "none" means /api/v1/ask answers 503 until one is
     # configured. "ollama" is a local development model on this machine only; "bedrock" is

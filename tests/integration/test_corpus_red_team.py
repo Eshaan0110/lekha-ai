@@ -235,10 +235,9 @@ async def test_100_documents_and_a_50_question_red_team_with_zero_anomalies(
     assert searches == 350
     assert hits > 0
 
-    # 4. Recall: readers find the documents they may read, by reference code. The fake
-    # embedder matches words exactly, so it must find all. BGE-M3 matches meaning and is
-    # weak at near-identical documents told apart only by a code; exact lookup needs the
-    # keyword half of hybrid search (Phase 3). Measured 2026-10-21: 108 of 124 (87%).
+    # 4. Recall: every reader finds every document they may read, by its reference code.
+    # Dense-only BGE-M3 managed 108 of 124 (87%), because meaning search is weak at exact
+    # codes; hybrid retrieval (keyword + meaning, the default) finds all 124 (2026-10-21).
     pairs = sum(len(doc.pattern.readers) for doc in corpus)
     missed = [
         (user, doc.code)
@@ -247,7 +246,4 @@ async def test_100_documents_and_a_50_question_red_team_with_zero_anomalies(
         if uploads[doc.code]["document_id"]
         not in {r["document_id"] for r in _search(client, user, doc.code)}
     ]
-    if run_settings.embedder == "fake":
-        assert missed == []
-    else:
-        assert len(missed) <= pairs * 0.15, f"{len(missed)}/{pairs} missed: {missed[:10]}"
+    assert missed == [], f"{len(missed)}/{pairs} missed: {missed[:10]}"

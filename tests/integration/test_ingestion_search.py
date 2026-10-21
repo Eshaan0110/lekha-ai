@@ -477,3 +477,45 @@ async def test_a_document_deleted_before_processing_is_never_indexed(
     status = await run_ingestion(deps, org.organisation_id, uuid.UUID(uploaded["ingestion_job_id"]))
     assert status is IngestionStatus.FAILED
     assert await _points(deps, document_id=uploaded["document_id"]) == []
+
+
+# --- hybrid retrieval -----------------------------------------------------------------
+
+
+def _coded_policy(code: str) -> bytes:
+    return make_docx([("Parking", [f"Parking permits are renewed at reception. Form {code}."])])
+
+
+async def test_keyword_search_finds_exact_codes_and_obeys_permissions(
+    client: TestClient, org: SeedResult, deps: PipelineDeps, settings: Settings
+) -> None:
+    asha_doc = _upload(
+        client, org, "a.docx", _coded_policy("PRK-7781"), [user_badge(org.users["asha"])]
+    )
+    meera_doc = _upload(
+        client, org, "m.docx", _coded_policy("PRK-9932"), [user_badge(org.users["meera"])]
+    )
+    for uploaded in (asha_doc, meera_doc):
+        await run_ingestion(deps, org.organisation_id, uuid.UUID(uploaded["ingestion_job_id"]))
+
+    assert settings.retrieval_mode == "hybrid"
+    found = [r["document_id"] for r in _search(client, "asha", "PRK-7781")]
+    assert found[0] == asha_doc["document_id"]
+    # The exact code of a document asha may not read finds nothing of it, by either path.
+    probe = {r["document_id"] for r in _search(client, "asha", "PRK-9932")}
+    assert meera_doc["document_id"] not in probe
+    assert meera_doc["document_id"] in {
+        r["document_id"] for r in _search(client, "meera", "PRK-9932")
+    }
+    for user in ("ravi", "kiran", "nobody"):
+        assert _search(client, user, "PRK-7781 PRK-9932 parking") == [], user
+
+
+@pytest.mark.parametrize("query", ["' | ! & :*", "&&&", "(((", "'; DROP TABLE chunk; --"])
+def test_search_syntax_in_a_question_is_harmless(
+    client: TestClient, org: SeedResult, query: str
+) -> None:
+    response = client.post(
+        "/api/v1/search", headers={"X-Dev-User": "dev|asha"}, json={"query": query}
+    )
+    assert response.status_code == 200, response.text

@@ -8,15 +8,17 @@ from enum import StrEnum
 
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKeyConstraint,
+    Index,
     LargeBinary,
     Text,
     UniqueConstraint,
     Uuid,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base
@@ -78,9 +80,15 @@ class ChunkRecord(TenantScoped, Base):
     heading_path: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
     language: Mapped[str] = mapped_column(Text, nullable=False)
     embedding_model: Mapped[str] = mapped_column(Text, nullable=False)
+    # Keyword-search form of the text, kept in step by PostgreSQL. 'simple' = lower-case
+    # words, no stemming and no stop words: it treats Kannada and English alike.
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR, Computed("to_tsvector('simple'::regconfig, text)", persisted=True)
+    )
 
     __table_args__ = (
         UniqueConstraint("document_version_id", "ordinal", name="uq_chunk_version_ordinal"),
+        Index("ix_chunk_search_vector", "search_vector", postgresql_using="gin"),
         ForeignKeyConstraint(
             ["organisation_id", "document_version_id"],
             ["document_version.organisation_id", "document_version.id"],

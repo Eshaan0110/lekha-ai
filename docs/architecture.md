@@ -32,12 +32,15 @@ db/documents.py      Writes for new uploads (document, file, version, guest list
 lekha/memory/        Upload validation (pure), object-store interface, S3 adapter
 apps/api/uploads.py  POST /api/v1/documents
 apps/api/search.py   POST /api/v1/search, GET /api/v1/ingestion-jobs/{id}
+apps/api/retrieval.py  Shared retrieval: permission-filtered dense + keyword search, RRF, DB re-check
+db/search.py         Keyword (full-text) search, permission rule in SQL
+lekha/generation/    Fixed prompt, citation verifier, abstention (pure)
 apps/worker/         ARQ worker: ingestion pipeline (extract → chunk → embed → index → publish) and deletion purge
 apps/api/deletions.py  POST/GET /api/v1/deletion-requests
 db/deletion.py       Deletion requests, soft delete, purge bookkeeping
 lekha/ingestion/     Text extraction, language by script, heading-aware chunking (pure)
 lekha/retrieval/     Permission filter from AuthContext; Qdrant adapter with the unscoped-search guard
-model_layer/         Embedder interface; fake embedder (simulation); all-MiniLM-L6-v2 (real, English, numpy); BGE-M3 (ONNX Runtime)
+model_layer/         Language-model interface (Ollama local, Bedrock); embedder interface; fake embedder (simulation); all-MiniLM-L6-v2 (real, English, numpy); BGE-M3 (ONNX Runtime)
 apps/api/idempotency.py, db/idempotency.py  Idempotency-Key: claim, replay, complete, release
 apps/api/routes_v1.py  /api/v1/me, /api/v1/documents (cursor paging), /api/v1/documents/{id}
 tests/unit/          Fast tests, no Docker required

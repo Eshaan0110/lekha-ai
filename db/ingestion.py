@@ -154,6 +154,7 @@ class SearchableChunk:
     chunk_id: uuid.UUID
     document_id: uuid.UUID
     version_id: uuid.UUID
+    version_number: int
     title: str
     text: str
     language: str
@@ -172,6 +173,7 @@ async def readable_chunks(
             ChunkRecord.id,
             Document.id,
             DocumentVersion.id,
+            DocumentVersion.version_number,
             Document.title,
             ChunkRecord.text,
             ChunkRecord.language,
@@ -187,7 +189,9 @@ async def readable_chunks(
         )
         .where(ChunkRecord.id.in_(chunk_ids), readable_condition(ctx, now=now))
     )
-    return {r[0]: SearchableChunk(r[0], r[1], r[2], r[3], r[4], r[5], tuple(r[6])) for r in rows}
+    return {
+        r[0]: SearchableChunk(r[0], r[1], r[2], r[3], r[4], r[5], r[6], tuple(r[7])) for r in rows
+    }
 
 
 async def visible_job(
