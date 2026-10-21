@@ -1,6 +1,6 @@
 # ADR-0016: Glossary applied by expanding questions, not by relinking documents
 
-- **Status:** Proposed (needs the owner's acceptance)
+- **Status:** Accepted by the owner on 2026-10-22
 - **Date:** 2026-10-21
 
 ## Context
