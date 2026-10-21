@@ -182,6 +182,7 @@ function Answer({
       <div className="answer abstained">
         <p>{result.answer}</p>
         <p className="muted small">{explainAbstention(result.abstention_reason)}</p>
+        <LogRequest user={user} queryId={result.query_id} />
       </div>
     );
   }
@@ -238,6 +239,31 @@ function Answer({
         </button>
         {result.model && <span className="muted small model">{result.model}</span>}
       </div>
+    </div>
+  );
+}
+
+/** "Would you like me to log it as a request?" (plan): only if the person chooses to. */
+function LogRequest({ user, queryId }: { user: string; queryId: string }) {
+  const [state, setState] = useState<"idle" | "sent" | "failed">("idle");
+  const send = async () => {
+    try {
+      const me = await api.me(user);
+      const unit = me.business_units.find((bu) => bu.roles.length > 0);
+      if (!unit) throw new Error("no unit");
+      await api.logRequest(user, queryId, unit.business_unit_id, "");
+      setState("sent");
+    } catch {
+      setState("failed");
+    }
+  };
+  if (state === "sent") return <p className="muted small">Sent to your curators. You'll see the outcome under Requests.</p>;
+  return (
+    <div className="feedback">
+      <button className="pill" onClick={() => void send()}>
+        Send this question to the curators
+      </button>
+      {state === "failed" && <span className="error small">Couldn't send it.</span>}
     </div>
   );
 }

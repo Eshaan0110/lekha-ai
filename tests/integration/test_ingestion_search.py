@@ -523,3 +523,22 @@ def test_search_syntax_in_a_question_is_harmless(
         "/api/v1/search", headers={"X-Dev-User": "dev|asha"}, json={"query": query}
     )
     assert response.status_code == 200, response.text
+
+
+async def test_searching_before_anything_is_indexed_finds_nothing(settings: Settings) -> None:
+    empty = build_vector_index(
+        settings.model_copy(
+            update={"qdrant_collection": f"lekha_test_empty_{uuid.uuid4().hex[:8]}"}
+        ),
+        FakeEmbedder.dimensions,
+    )
+    try:
+        scoped = {
+            "must": [
+                {"key": "tenant_id", "match": {"value": "x"}},
+                {"key": "allowed_subjects", "match": {"any": ["y"]}},
+            ]
+        }
+        assert await empty.search([0.0] * FakeEmbedder.dimensions, scoped, limit=5) == []
+    finally:
+        await empty.close()

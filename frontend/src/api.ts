@@ -27,6 +27,31 @@ export interface AskResult {
   also_searched: string[];
 }
 
+export interface QuestionRequest {
+  id: string;
+  question: string;
+  asked_by: string;
+  business_unit_id: string;
+  note: string;
+  status: "open" | "resolved" | "dismissed";
+  resolution: string;
+  created_at: string;
+  resolved_at: string | null;
+  mine: boolean;
+}
+
+export interface AuditEvent {
+  occurred_at: string;
+  actor: string | null;
+  action: string;
+  method: string;
+  path: string;
+  status_code: number;
+  outcome: string;
+  target_type: string | null;
+  request_id: string;
+}
+
 export interface GlossaryEntry {
   id: string;
   canonical: string;
@@ -173,6 +198,28 @@ export const api = {
   meeting: (user: string, id: string) => call<MeetingDetail>(user, `/meetings/${id}`),
 
   glossary: (user: string) => call<GlossaryEntry[]>(user, "/glossary"),
+
+  logRequest: (user: string, queryId: string, businessUnitId: string, note: string) =>
+    call<{ id: string }>(user, `/answers/${queryId}/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ business_unit_id: businessUnitId, note }),
+    }),
+
+  requests: (user: string) => call<QuestionRequest[]>(user, "/requests"),
+
+  resolveRequest: (user: string, id: string, status: "resolved" | "dismissed", resolution: string) =>
+    call<QuestionRequest>(user, `/requests/${id}/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, resolution }),
+    }),
+
+  audit: (user: string, cursor: string | null) =>
+    call<{ items: AuditEvent[]; next_cursor: string | null }>(
+      user,
+      `/audit?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    ),
 
   addGlossary: (user: string, entry: Record<string, unknown>) =>
     call<GlossaryEntry>(user, "/glossary", {

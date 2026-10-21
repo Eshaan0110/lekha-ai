@@ -54,12 +54,14 @@ a recorded manual check proves it.
 | Transcript validation | UTF-8 only, ≤ 5 MB, ≤ 20,000 turns, markup stripped, unknown formats refused | `test_transcript.py`, `test_import_rules` |
 | Minutes are human-approved and grounded | Drafts are never searchable; only the organiser approves; every decision and action must quote the transcript verbatim or it is dropped; nothing is sent anywhere | `test_minutes.py`, `test_minutes_are_drafted_by_participants_and_approved_only_by_the_organiser`, `test_invented_evidence_never_reaches_the_approver` |
 | Glossary can't widen access | Entries are managed by the unit's curators and visible per unit (or shared); expansion only changes the query, every search stays permission-filtered; entry text sent to the model is neutralised | `test_glossary.py` (Ravi gets no expansion or results from Alpha's entry) |
+| Audit reader | `GET /api/v1/audit` requires `audit_reader`; scoped to activity by people with a role in the reader's unit; shows actions and paths, never question or document text | `test_the_audit_log_is_for_audit_readers_and_scoped_to_their_unit` |
+| Question requests need consent | A question reaches curators only if the asker sends it; curators of other units can't see or close it | `test_an_unanswered_question_can_be_logged_and_followed_up_by_curators` |
 | Interactive API docs off outside local/test | `/docs` and `/openapi.json` disabled in staging/production | `test_interactive_docs_are_disabled_in_production` |
 
 ## Not yet implemented (Phase 1, later slices)
 
 - Group OIDC sign-in (blocked on Phase 0). Until then every protected route answers 401 outside local/test.
-- Audit **reader** endpoint (`GET /api/v1/audit`, `audit_reader` role, BU-scoped) and WORM export/retention.
+- WORM export and retention for the audit log (the reader endpoint is built, Phase 4).
 - Malware scanning of uploads.
 - Rate limiting (planned phase per Implementation Plan).
 

@@ -28,6 +28,7 @@ _TARGET_PARAMS = {
     "meeting_id": "meeting",
     "minutes_id": "meeting_minutes",
     "entry_id": "glossary_entry",
+    "question_request_id": "question_request",
 }
 
 

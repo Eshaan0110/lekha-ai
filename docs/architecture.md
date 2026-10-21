@@ -137,6 +137,9 @@ request ID, and turned into a generic `500 internal_error` envelope.
 | `POST /api/v1/minutes/{id}/approve`, `…/reject` | Approve (optionally edited) or reject; approved minutes become searchable with the meeting | The meeting's organiser |
 | `GET /api/v1/glossary` | Glossary entries you can see (your unit's, plus shared ones) | Anyone with a role |
 | `POST /api/v1/glossary`, `PATCH`/`DELETE /api/v1/glossary/{id}` | Manage a unit's glossary | Curators of that unit |
+| `POST /api/v1/answers/{query_id}/request` | Send an unanswered question to your unit's curators (asker only) | Signed in |
+| `GET /api/v1/requests`, `POST /api/v1/requests/{id}/resolve` | Requests in units you curate (plus your own); resolve or dismiss | Curators of the unit |
+| `GET /api/v1/audit?limit=&cursor=` | Audit trail of activity by people in your audit units | `audit_reader` |
 | `GET /api/v1/ingestion-jobs/{id}` | Processing status of an upload | Curator of the unit, or a reader of the document |
 | `POST /api/v1/documents` | Upload a PDF/DOCX (multipart `file` + `metadata` JSON); an existing `canonical_key` adds a new version; optional `Idempotency-Key` header for safe retries | Curator in the business unit |
 | `POST /api/v1/deletion-requests` | Delete a document: hidden at once, derived data purged by the worker | Curator of the document's unit, cleared for it |

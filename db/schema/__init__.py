@@ -22,6 +22,7 @@ from db.schema.identity import (
 )
 from db.schema.ingestion import ChunkRecord, IngestionJob, IngestionStatus
 from db.schema.meetings import Meeting, MeetingMinutes, MeetingParticipant, MinutesStatus
+from db.schema.support import QuestionRequest, RequestStatus
 
 __all__ = [
     "AnswerFeedback",
@@ -50,6 +51,8 @@ __all__ = [
     "Organisation",
     "PermissionSubject",
     "QueryLog",
+    "QuestionRequest",
+    "RequestStatus",
     "Role",
     "SourceSystem",
     "UserRoleGrant",

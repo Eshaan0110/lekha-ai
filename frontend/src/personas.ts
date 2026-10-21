@@ -14,5 +14,6 @@ export const PERSONAS: Persona[] = [
   { id: "ravi", name: "Ravi", role: "Employee, Beta plant", note: "Reads only Beta plant documents" },
   { id: "chitra", name: "Chitra", role: "Curator, Alpha", note: "Uploads documents for Alpha" },
   { id: "bina", name: "Bina", role: "Curator, Beta plant", note: "Uploads documents for Beta" },
+  { id: "tara", name: "Tara", role: "Auditor, Alpha", note: "Reads Alpha's audit log, no documents" },
   { id: "nobody", name: "Nobody", role: "No roles", note: "Has access to nothing" },
 ];

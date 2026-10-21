@@ -159,7 +159,7 @@ class QdrantIndex:
     ) -> list[Hit]:
         if not filter_is_permission_scoped(query_filter):
             raise UnscopedSearchError("refusing a search without tenant and permission filters")
-        response = await self._ok(
+        response = await self._send(
             self._client.post(
                 f"/collections/{self._collection}/points/search",
                 json={
@@ -170,6 +170,9 @@ class QdrantIndex:
                 },
             )
         )
+        if response.status_code == 404:
+            return []  # nothing indexed yet: the collection is created by the first upload
+        _raise_for_status(response)
         return [
             Hit(chunk_id=uuid.UUID(str(item["id"])), score=item["score"], payload=item["payload"])
             for item in response.json()["result"]
