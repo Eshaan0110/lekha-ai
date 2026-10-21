@@ -29,6 +29,8 @@ class Chunk:
     language: Language
     token_count: int
     page: int | None
+    start_ms: int | None = None  # meeting transcripts: where in the meeting this chunk starts
+    end_ms: int | None = None
 
 
 def _sentences(text: str) -> list[str]:

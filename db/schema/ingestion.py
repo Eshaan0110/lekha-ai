@@ -80,6 +80,9 @@ class ChunkRecord(TenantScoped, Base):
     heading_path: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False)
     language: Mapped[str] = mapped_column(Text, nullable=False)
     embedding_model: Mapped[str] = mapped_column(Text, nullable=False)
+    # Meeting transcripts: where in the meeting this chunk starts and ends (milliseconds).
+    start_ms: Mapped[int | None] = mapped_column()
+    end_ms: Mapped[int | None] = mapped_column()
     # Keyword-search form of the text, kept in step by PostgreSQL. 'simple' = lower-case
     # words, no stemming and no stop words: it treats Kannada and English alike.
     search_vector: Mapped[str] = mapped_column(
@@ -97,4 +100,9 @@ class ChunkRecord(TenantScoped, Base):
         CheckConstraint("token_count > 0", name="token_count_positive"),
         CheckConstraint("octet_length(text_sha256) = 32", name="sha256_length"),
         CheckConstraint("language IN ('en', 'hi', 'kn', 'und')", name="language_known"),
+        CheckConstraint(
+            "(start_ms IS NULL OR start_ms >= 0) AND "
+            "(end_ms IS NULL OR start_ms IS NULL OR end_ms >= start_ms)",
+            name="times_ordered",
+        ),
     )

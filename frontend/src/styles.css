@@ -198,6 +198,12 @@ mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 0
 .upload fieldset { border: 1px solid var(--line); border-radius: 8px; display: flex; gap: 1rem; flex-wrap: wrap; }
 .upload .check { display: flex; align-items: center; gap: 0.35rem; }
 
+.left { text-align: left; text-decoration: none; color: var(--text); }
+.left:hover { text-decoration: underline; }
+.transcript { list-style: none; margin: 1rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.transcript li { display: grid; grid-template-columns: 3.5rem 1fr; gap: 0.5rem; line-height: 1.55; }
+.turn-time { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 0.85rem; padding-top: 0.1rem; }
+
 @media (max-width: 640px) {
   .topbar { gap: 0.75rem; }
   .who { margin-left: 0; width: 100%; }

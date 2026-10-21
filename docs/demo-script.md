@@ -14,7 +14,8 @@ used.
    ```
 2. In three more terminals: `./dev.ps1 run` (API), `./dev.ps1 worker` (processing) and
    `./dev.ps1 web` (web app).
-3. `./dev.ps1 demo-load` loads 42 synthetic policies. Wait for "All documents processed".
+3. `./dev.ps1 demo-load` loads 42 synthetic policies and 4 synthetic meetings. Wait for "All
+   documents processed". It is safe to run again; anything already loaded is skipped.
 4. **Stop the worker** (Ctrl+C in its terminal). It is no longer needed, and it frees about
    2.5 GB of memory for the AI model.
 5. Close other heavy apps (browsers with many tabs, Teams).
@@ -38,7 +39,9 @@ Claude on AWS (a few seconds per answer) once the AWS account exists.
 | 7 | Ravi asks *"What shift allowance do night shift workers get?"* | "His own plant's policy works normally." |
 | 8 | **Asha** asks *"Is there a gym in the office?"* | "No document says, so Lekha says it doesn't know instead of guessing." |
 | 9 | **Asha** asks in Kannada: *ಪ್ರತಿ ವರ್ಷ ಎಷ್ಟು ದಿನಗಳ ಸಾಂದರ್ಭಿಕ ರಜೆ ಸಿಗುತ್ತದೆ?* | "Kannada questions and documents work; Hindi is planned." |
-| 10 | **Chitra** → Documents → upload a Word file, share with Asha | "Curators upload policies; they become searchable in about a minute, with permissions attached." |
+| 10 | **Asha** → Meetings: open *Weekly safety review*; then Ask *"By when must forklift drivers be retrained?"* | "Meetings are memory too. The answer cites the meeting and the exact moment, 12:40. Only the people who were there can see it." |
+| 11 | **Chitra** → Meetings | "Chitra curates Alpha's documents, but she wasn't in these meetings, so she sees none of them." |
+| 12 | **Chitra** → Documents → upload a Word file, share with Asha | "Curators upload policies; they become searchable in about a minute, with permissions attached." |
 
 **Safety points to mention:**
 - Permissions are applied *before* the AI sees anything.

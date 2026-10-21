@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { type AskResult, ApiError, api } from "../api";
-import { explainAbstention, splitAnswer } from "../answer";
+import { explainAbstention, formatMs, splitAnswer } from "../answer";
 import { SourcePanel } from "./SourcePanel";
 
 const EXAMPLES: Record<string, string[]> = {
@@ -213,7 +213,11 @@ function Answer({
               <span className="cite static">{c.number}</span>
               <span className="source-text">
                 <span className="source-title">
-                  {c.title} <span className="version">v{c.version_number}</span>
+                  {c.kind === "meeting" && <span className="tag">Meeting</span>} {c.title}{" "}
+                  <span className="version">v{c.version_number}</span>
+                  {c.kind === "meeting" && c.start_ms !== null && (
+                    <span className="muted small"> · at {formatMs(c.start_ms)}</span>
+                  )}
                 </span>
                 <span className="quote">“{c.span}”</span>
               </span>

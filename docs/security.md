@@ -50,6 +50,8 @@ a recorded manual check proves it.
 | Answer logs | Question and answer text stored in `query_log`/`answer_log` (tenant RLS), never in application logs; answers quoting a deleted document are wiped | `test_deleting_a_document_wipes_logged_answers_that_quoted_it` |
 | Local model stays local | Ollama URL must be loopback; cloud model tags refused; Ollama refused in staging/production | `test_config.py` |
 | Abuse and cost control | `/ask` limited per user per minute; Redis outage refuses rather than lets through | `test_rate_limits_fail_closed`, `test_the_redis_limiter_counts_per_user` |
+| Meetings readable only by participants | A meeting's guest list is its participants (importer always included); unit curators who weren't present can't search, list, open or ask about it | `test_only_participants_can_find_read_or_ask_about_a_meeting` |
+| Transcript validation | UTF-8 only, ≤ 5 MB, ≤ 20,000 turns, markup stripped, unknown formats refused | `test_transcript.py`, `test_import_rules` |
 | Interactive API docs off outside local/test | `/docs` and `/openapi.json` disabled in staging/production | `test_interactive_docs_are_disabled_in_production` |
 
 ## Not yet implemented (Phase 1, later slices)

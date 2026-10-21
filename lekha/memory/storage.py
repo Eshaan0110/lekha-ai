@@ -22,6 +22,10 @@ class ObjectStore(Protocol):
         """Store bytes at ``key``. Raise ObjectStoreError on failure."""
         ...
 
+    async def get(self, key: str) -> tuple[bytes, str]:
+        """The bytes and content type at ``key``. Raise ObjectStoreError on failure."""
+        ...
+
     async def delete(self, key: str) -> None:
         """Remove ``key`` if present. Raise ObjectStoreError on failure."""
         ...

@@ -25,6 +25,7 @@ _TARGET_PARAMS = {
     "request_id": "deletion_request",
     "chunk_id": "chunk",
     "query_id": "query_log",
+    "meeting_id": "meeting",
 }
 
 

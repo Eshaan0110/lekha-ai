@@ -46,3 +46,23 @@ def can_manage(
         return False
     clearance = ctx.clearance_by_bu.get(business_unit_id)
     return clearance is not None and classification.within(clearance)
+
+
+def meeting_import_denial(
+    ctx: AuthContext,
+    *,
+    business_unit_id: uuid.UUID,
+    classification: Classification,
+    allow_confidential: bool,
+) -> UploadDenial | None:
+    """None if the caller may import a meeting into this unit. Unlike documents, anyone
+    with a role in the unit may import their own meetings (the importer is always one of
+    the participants, who are the only readers); the release gate and clearance still apply."""
+    if not allow_confidential and not classification.within(HIGHEST_UNGATED_CLASSIFICATION):
+        return UploadDenial.RELEASE_GATE
+    if not ctx.roles_by_bu.get(business_unit_id):
+        return UploadDenial.NOT_CURATOR  # no role at all in this unit
+    clearance = ctx.clearance_by_bu.get(business_unit_id)
+    if clearance is None or not classification.within(clearance):
+        return UploadDenial.ABOVE_CLEARANCE
+    return None

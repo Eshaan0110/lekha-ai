@@ -57,6 +57,9 @@ class RecordingStore:
     async def check(self) -> None:
         await self.inner.check()
 
+    async def get(self, key: str) -> tuple[bytes, str]:
+        return await self.inner.get(key)
+
 
 class BrokenStore(RecordingStore):
     async def put(self, key: str, data: bytes, *, media_type: str, sha256: bytes) -> None:

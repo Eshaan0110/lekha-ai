@@ -45,6 +45,8 @@ class SearchResult(BaseModel):
     language: str
     heading_path: list[str]
     score: float
+    kind: str = "document"  # "document" or "meeting"
+    start_ms: int | None = None  # meetings: where the passage starts
 
 
 class SearchResponse(BaseModel):
@@ -79,6 +81,8 @@ async def search(request: Request, ctx: CurrentUser, body: SearchRequest) -> Sea
             language=c.chunk.language,
             heading_path=list(c.chunk.heading_path),
             score=c.score,
+            kind=c.chunk.kind,
+            start_ms=c.chunk.start_ms,
         )
         for c in found.candidates
     ]
@@ -109,6 +113,8 @@ class ChunkOut(BaseModel):
     heading_path: list[str]
     language: str
     text: str
+    kind: str
+    start_ms: int | None
 
 
 @router.get(
@@ -132,4 +138,6 @@ async def get_chunk(request: Request, ctx: CurrentUser, chunk_id: uuid.UUID) -> 
         heading_path=list(chunk.heading_path),
         language=chunk.language,
         text=chunk.text,
+        kind=chunk.kind,
+        start_ms=chunk.start_ms,
     )

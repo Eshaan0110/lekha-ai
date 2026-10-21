@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { explainAbstention, splitAnswer } from "./answer";
+import { explainAbstention, formatMs, splitAnswer } from "./answer";
 import { parseSse } from "./sse";
 
 describe("parseSse", () => {
@@ -47,5 +47,13 @@ describe("explainAbstention", () => {
     expect(explainAbstention("no_sources")).toMatch(/access/);
     expect(explainAbstention("something_new")).toMatch(/enough evidence/);
     expect(explainAbstention(null)).toMatch(/enough evidence/);
+  });
+});
+
+describe("formatMs", () => {
+  it("shows meeting times like a player", () => {
+    expect(formatMs(5_120)).toBe("00:05");
+    expect(formatMs(760_000)).toBe("12:40");
+    expect(formatMs(3_725_000)).toBe("1:02:05");
   });
 });

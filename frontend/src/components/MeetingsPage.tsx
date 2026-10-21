@@ -1,0 +1,171 @@
+import { type FormEvent, useEffect, useState } from "react";
+import { type MeetingDetail, type MeetingItem, type Me, ApiError, api } from "../api";
+import { PERSONAS } from "../personas";
+
+const PEOPLE = ["asha", "meera", "ravi", "chitra", "bina"];
+
+export function MeetingsPage({ user }: { user: string }) {
+  const [meetings, setMeetings] = useState<MeetingItem[] | null>(null);
+  const [me, setMe] = useState<Me | null>(null);
+  const [open, setOpen] = useState<MeetingDetail | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    api.meetings(user).then(setMeetings).catch(() => setError("Couldn't load meetings."));
+    api.me(user).then(setMe).catch(() => undefined);
+  };
+  useEffect(() => {
+    load(); // reload only when the user changes
+  }, [user]);
+
+  const show = (id: string) =>
+    api
+      .meeting(user, id)
+      .then(setOpen)
+      .catch(() => setError("That meeting isn't available to you."));
+
+  const unit = me?.business_units.find((bu) => bu.roles.length > 0);
+
+  return (
+    <div className="docs">
+      <section>
+        <h1>Meetings you took part in</h1>
+        <p className="muted">
+          Only the people in a meeting can find it, read it, or get answers from it. Not even a
+          curator can, unless they were there.
+        </p>
+        {error && <p className="error">{error}</p>}
+        {meetings && meetings.length === 0 && <p className="muted">None yet.</p>}
+        {meetings && meetings.length > 0 && (
+          <ul className="doc-list">
+            {meetings.map((m) => (
+              <li key={m.id}>
+                <button className="link doc-title left" onClick={() => void show(m.id)}>
+                  {m.title}
+                </button>
+                <span className="muted small">{new Date(m.started_at).toLocaleString()}</span>
+                <span className="version">v{m.version_number}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+      {open && <Transcript meeting={open} onClose={() => setOpen(null)} />}
+      {unit && <ImportMeeting user={user} unitId={unit.business_unit_id} onDone={load} />}
+    </div>
+  );
+}
+
+function Transcript({ meeting, onClose }: { meeting: MeetingDetail; onClose: () => void }) {
+  return (
+    <div className="panel-backdrop" onClick={onClose}>
+      <aside className="panel" role="dialog" aria-label="Meeting transcript" onClick={(e) => e.stopPropagation()}>
+        <button className="link close" onClick={onClose}>
+          Close
+        </button>
+        <p className="muted small">Meeting · {new Date(meeting.started_at).toLocaleString()}</p>
+        <h2>
+          {meeting.title} <span className="version">v{meeting.version_number}</span>
+        </h2>
+        <p className="muted small">With {meeting.participants.join(", ")}</p>
+        <ol className="transcript">
+          {meeting.transcript.map((turn, i) => (
+            <li key={i}>
+              <span className="turn-time">{turn.at ?? ""}</span>
+              <span>
+                {turn.speaker && <strong>{turn.speaker}: </strong>}
+                {turn.text}
+              </span>
+            </li>
+          ))}
+        </ol>
+      </aside>
+    </div>
+  );
+}
+
+function ImportMeeting({ user, unitId, onDone }: { user: string; unitId: string; onDone: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
+  const [startedAt, setStartedAt] = useState("");
+  const [people, setPeople] = useState<string[]>([]);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!file || !title.trim() || !startedAt) return;
+    setBusy(true);
+    setStatus("Importing…");
+    try {
+      // Development only: look up the synthetic participants' IDs.
+      const ids = await Promise.all(people.map((p) => api.me(p).then((m) => m.user_id)));
+      const imported = await api.importMeeting(user, file, {
+        title: title.trim(),
+        business_unit_id: unitId,
+        started_at: `${startedAt}:00+05:30`, // the form's local time, India Standard Time
+        participant_user_ids: ids,
+      });
+      setStatus(`Imported ${imported.turns} turns (version ${imported.version_number}). Processing…`);
+      for (let i = 0; i < 300; i++) {
+        const job = await api.job(user, imported.ingestion_job_id);
+        if (job.status === "succeeded") {
+          setStatus("Ready: the meeting is searchable by its participants.");
+          onDone();
+          return;
+        }
+        if (job.status === "failed") {
+          setStatus(`Processing failed (${job.error_code ?? "unknown"}).`);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+      setStatus("Still processing. Is the worker running?");
+    } catch (error) {
+      setStatus(error instanceof ApiError ? error.message : "Import failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="upload">
+      <h2>Import a meeting</h2>
+      <p className="muted small">
+        A transcript exported from Teams (.vtt), or an .srt or .txt file. You are always a
+        participant; add the others who were there.
+      </p>
+      <form onSubmit={submit}>
+        <label>
+          Transcript
+          <input type="file" accept=".vtt,.srt,.txt" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        </label>
+        <label>
+          Title
+          <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300} />
+        </label>
+        <label>
+          Started at (IST)
+          <input type="datetime-local" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} />
+        </label>
+        <fieldset>
+          <legend>Who else was there</legend>
+          {PEOPLE.filter((p) => p !== user).map((p) => (
+            <label key={p} className="check">
+              <input
+                type="checkbox"
+                checked={people.includes(p)}
+                onChange={(e) => setPeople((all) => (e.target.checked ? [...all, p] : all.filter((x) => x !== p)))}
+              />
+              {PERSONAS.find((x) => x.id === p)?.name}
+            </label>
+          ))}
+        </fieldset>
+        <button className="primary" disabled={busy || !file || !title.trim() || !startedAt}>
+          Import
+        </button>
+        {status && <p className="muted small">{status}</p>}
+      </form>
+    </section>
+  );
+}

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { AskPage } from "./components/AskPage";
 import { DocumentsPage } from "./components/DocumentsPage";
+import { MeetingsPage } from "./components/MeetingsPage";
 import { SignIn } from "./components/SignIn";
 import { PERSONAS } from "./personas";
 
-type Tab = "ask" | "documents";
+type Tab = "ask" | "documents" | "meetings";
 
 function remembered(): string | null {
   try {
@@ -50,6 +51,9 @@ export function App() {
           <button className={tab === "documents" ? "tab active" : "tab"} onClick={() => setTab("documents")}>
             Documents
           </button>
+          <button className={tab === "meetings" ? "tab active" : "tab"} onClick={() => setTab("meetings")}>
+            Meetings
+          </button>
         </nav>
         <div className="who">
           <span className="who-name">{persona.name}</span>
@@ -61,7 +65,9 @@ export function App() {
       </header>
       <div className="banner">Local demo · synthetic documents only · development sign-in</div>
       <main className="content">
-        {tab === "ask" ? <AskPage key={user} user={user} /> : <DocumentsPage key={user} user={user} />}
+        {tab === "ask" && <AskPage key={user} user={user} />}
+        {tab === "documents" && <DocumentsPage key={user} user={user} />}
+        {tab === "meetings" && <MeetingsPage key={user} user={user} />}
       </main>
     </div>
   );

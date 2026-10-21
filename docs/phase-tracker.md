@@ -102,7 +102,7 @@ Owner said go ahead (2026-10-21). Plan approved with the recommended D1–D6: [d
 | Step | Status | Evidence |
 |---|---|---|
 | 1. Demo web app (React + TypeScript + Vite) | Tested | `frontend/`: persona sign-in, Ask with live progress (`POST /api/v1/ask/stream`, progress only, answer sent after verification), clickable citations → source passage (`GET /api/v1/chunks/{id}`, same access rule), feedback (`POST /api/v1/answers/{id}/feedback`, migration 0009), documents list and curator upload; `logic.test.ts` (6), `test_ask.py` (+5); live run in the browser with BGE-M3 + qwen3.5:9b: cited answers in 30–41 s warm, permission refusals in < 1 s; [demo-script.md](demo-script.md) |
-| 2. Meeting import | Not started | |
+| 2. Meeting import | Tested | ADR-0015 (Proposed). `POST/GET /api/v1/meetings`, `GET /api/v1/meetings/{id}`; .vtt/.srt/.txt parsing (`test_transcript.py`, 14); migration 0010; participant-only access (curators who weren't present see nothing); re-import = new version (source ID, or organiser ±2 min); citations give the exact turn time; organiser may delete; `test_meetings.py` (10); live: 4 demo meetings, cited answer from a meeting with the local model, private pay meeting withheld from Asha |
 | 3. Minutes with approval | Not started | |
 | 4. Glossary | Not started | |
 | 5. Pilot support | Not started | | The real 20-user pilot stays blocked on Phase 0.

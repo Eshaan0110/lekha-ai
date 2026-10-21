@@ -37,6 +37,7 @@ apps/api/ratelimit.py  Per-user fixed-window limit in Redis (fails closed)
 db/answers.py        query_log, answer_log, citation writes; redaction on deletion
 apps/api/retrieval.py  Shared retrieval: permission-filtered dense + keyword search, RRF, DB re-check
 db/search.py         Keyword (full-text) search, permission rule in SQL
+apps/api/meetings.py, db/meetings.py, lekha/ingestion/transcript.py  Meeting memory: import, participant-only access, timed chunks
 lekha/generation/    Fixed prompt, citation verifier, abstention (pure)
 apps/worker/         ARQ worker: ingestion pipeline (extract → chunk → embed → index → publish) and deletion purge
 apps/api/deletions.py  POST/GET /api/v1/deletion-requests
@@ -130,6 +131,8 @@ request ID, and turned into a generic `500 internal_error` envelope.
 | `POST /api/v1/ask/stream` | Same as `/ask`, with progress events (server-sent events); the answer is sent only after its citations are verified | Signed in |
 | `GET /api/v1/chunks/{id}` | The full source passage behind a citation; `404` if not readable | Signed in |
 | `POST /api/v1/answers/{query_id}/feedback` | Helpful / not helpful (+ comment); only the asker | Signed in |
+| `POST /api/v1/meetings` | Import a meeting transcript (.vtt/.srt/.txt + metadata); participants are its only readers; a re-import adds a version | Anyone with a role in the unit |
+| `GET /api/v1/meetings`, `GET /api/v1/meetings/{id}` | Meetings you took part in; transcript with times and speakers | Participants |
 | `GET /api/v1/ingestion-jobs/{id}` | Processing status of an upload | Curator of the unit, or a reader of the document |
 | `POST /api/v1/documents` | Upload a PDF/DOCX (multipart `file` + `metadata` JSON); an existing `canonical_key` adds a new version; optional `Idempotency-Key` header for safe retries | Curator in the business unit |
 | `POST /api/v1/deletion-requests` | Delete a document: hidden at once, derived data purged by the worker | Curator of the document's unit, cleared for it |

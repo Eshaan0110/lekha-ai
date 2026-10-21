@@ -56,6 +56,8 @@ class SourceBlock:
     heading_path: tuple[str, ...]
     language: str
     text: str
+    kind: str = "document"  # "document" or "meeting"
+    start_ms: int | None = None  # meetings: where the passage starts
 
 
 def neutralise(text: str) -> str:
@@ -67,9 +69,15 @@ def render_user_prompt(question: str, sources: list[SourceBlock], language: str)
     lines = ["Sources:"]
     for source in sources:
         path = " > ".join(neutralise(h) for h in source.heading_path) or "-"
+        where = ""
+        if source.kind == "meeting":
+            where = " | meeting transcript"
+            if source.start_ms is not None:
+                seconds = source.start_ms // 1000
+                where += f" from {seconds // 60:02d}:{seconds % 60:02d}"
         lines.append(
             f"[{source.number}] title: {neutralise(source.title)} | "
-            f"version: v{source.version_number} | path: {path}"
+            f"version: v{source.version_number} | path: {path}{where}"
         )
         lines.append(FENCE_OPEN)
         lines.append(neutralise(source.text))

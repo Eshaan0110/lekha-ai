@@ -27,8 +27,16 @@ from db.ingestion import (
 )
 from db.schema import IngestionJob, IngestionStatus
 from db.tenancy import tenant_transaction
-from lekha.ingestion import Chunk, ExtractionError, chunk_sections, extract_sections
-from lekha.memory import ObjectStoreError
+from lekha.ingestion import (
+    Chunk,
+    ExtractionError,
+    TranscriptError,
+    chunk_sections,
+    chunk_transcript,
+    extract_sections,
+    from_canonical_json,
+)
+from lekha.memory import FileKind, ObjectStoreError
 from lekha.memory.s3_store import S3ObjectStore
 from lekha.retrieval import IndexedPoint, QdrantIndex, VectorIndexError
 from model_layer import Embedder
@@ -95,6 +103,13 @@ async def run_ingestion(
 
 async def _extract_and_chunk(deps: PipelineDeps, target: VersionToIngest) -> list[Chunk]:
     data, _ = await deps.store.get(target.storage_key)
+    if target.kind is FileKind.TRANSCRIPT:
+        try:
+            segments = from_canonical_json(data)
+        except TranscriptError as exc:
+            raise ExtractionError(exc.code) from None
+        await _set_stage(deps, target, "chunk")
+        return chunk_transcript(segments)
     sections = extract_sections(target.kind, data)
     await _set_stage(deps, target, "chunk")
     return chunk_sections(sections)

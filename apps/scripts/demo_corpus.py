@@ -251,3 +251,89 @@ DOCS: tuple[GoldenDoc, ...] = (
 
 if len(DOCS) != 42:  # the golden set's answer key assumes exactly these documents
     raise RuntimeError("demo corpus changed: update tests/eval/golden.py")
+
+
+@dataclass(frozen=True, slots=True)
+class DemoMeeting:
+    key: str
+    title: str
+    organiser: str
+    participants: tuple[str, ...]  # besides the organiser
+    started_at: str
+    filename: str
+    transcript: str
+
+
+MEETINGS: tuple[DemoMeeting, ...] = (
+    DemoMeeting(
+        "safety-review",
+        "Weekly safety review",
+        "asha",
+        ("meera",),
+        "2026-10-14T10:00:00+05:30",
+        "safety-review.vtt",
+        """WEBVTT
+
+1
+00:00:05.000 --> 00:00:11.000
+<v Asha>Let's start with the forklift incident at the Alpha warehouse last Tuesday.</v>
+
+2
+00:04:20.000 --> 00:04:31.000
+<v Meera>Legal's view is that we document the near miss and retrain everyone who drives a forklift.</v>
+
+3
+00:12:40.000 --> 00:12:52.000
+<v Asha>Agreed. All forklift drivers will be retrained by 30 November, and Kavya becomes the fire marshal for Building C.</v>
+
+4
+00:18:05.000 --> 00:18:14.000
+<v Meera>The next external safety audit is on 3 December, so the retraining records must be ready by then.</v>
+""",
+    ),
+    DemoMeeting(
+        "pay-committee",
+        "Pay and grading committee",
+        "meera",
+        (),
+        "2026-10-15T15:00:00+05:30",
+        "pay-committee.vtt",
+        """WEBVTT
+
+1
+00:02:00.000 --> 00:02:12.000
+<v Meera>The committee approves raising the Grade 7 band by 6 percent from April.</v>
+
+2
+00:09:30.000 --> 00:09:41.000
+<v Meera>The revised bands stay confidential until the announcement on 1 March.</v>
+""",
+    ),
+    DemoMeeting(
+        "beta-shifts",
+        "Beta plant shift planning",
+        "ravi",
+        ("bina",),
+        "2026-10-16T09:30:00+05:30",
+        "beta-shifts.srt",
+        """1
+00:00:30,000 --> 00:00:38,000
+Bina: From next month the night shift at the Beta plant starts at 22:00 instead of 21:00.
+
+2
+00:06:15,000 --> 00:06:24,000
+Ravi: Two extra forklifts arrive on 18 November for the loading bay.
+""",
+    ),
+    DemoMeeting(
+        "kannada-safety",
+        "ಸುರಕ್ಷತಾ ಸಭೆ",
+        "asha",
+        ("meera",),
+        "2026-10-17T11:00:00+05:30",
+        "suraksha-sabhe.txt",
+        """[00:01:10] Asha: ಹೊಸ ಅಗ್ನಿಶಾಮಕ ತರಬೇತಿ ಡಿಸೆಂಬರ್ 5 ರಂದು ನಡೆಯುತ್ತದೆ.
+[00:03:45] Meera: ಎಲ್ಲಾ ನೌಕರರು ತರಬೇತಿಗೆ ಹಾಜರಾಗಬೇಕು.
+""",
+    ),
+)

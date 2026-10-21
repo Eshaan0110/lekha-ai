@@ -18,8 +18,10 @@ Order of checks, cheapest and safest first:
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, Protocol
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -28,6 +30,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from redis.exceptions import RedisError
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.datastructures import UploadFile
 
 from apps.api.auth import CurrentUser, require_auth_context
@@ -205,13 +208,13 @@ async def upload_document(request: Request, ctx: CurrentUser) -> JSONResponse:
             return replay
 
     try:
-        result = await _create_document(request, ctx, metadata, validated, data)
+        result = await create_document(request, ctx, metadata, validated, data)
     except BaseException:
         if scope is not None:
             await idempotency.release(scope)  # nothing was created: the key may be reused
         raise
 
-    await _enqueue(request, ctx.organisation_id, result.ingestion_job_id)
+    await enqueue_ingestion(request, ctx.organisation_id, result.ingestion_job_id)
     body = result.model_dump(mode="json")
     location = f"/api/v1/documents/{result.document_id}"
     if scope is not None:
@@ -221,7 +224,9 @@ async def upload_document(request: Request, ctx: CurrentUser) -> JSONResponse:
     return JSONResponse(status_code=201, content=body, headers={"Location": location})
 
 
-async def _enqueue(request: Request, organisation_id: uuid.UUID, job_id: uuid.UUID | None) -> None:
+async def enqueue_ingestion(
+    request: Request, organisation_id: uuid.UUID, job_id: uuid.UUID | None
+) -> None:
     """Hand the job to the worker. The document is already safely stored, so a queue
     outage is logged and the job stays "queued" rather than failing the upload."""
     if job_id is None:
@@ -237,14 +242,43 @@ def _set_audit_target(request: Request, document_id: str) -> None:
     request.scope.setdefault("state", {})["audit_target"] = ("document", document_id)
 
 
-async def _create_document(
+class DocumentSpec(Protocol):
+    """What a stored document needs; satisfied by upload metadata and by meeting imports."""
+
+    @property
+    def title(self) -> str: ...
+    @property
+    def canonical_key(self) -> str: ...
+    @property
+    def business_unit_id(self) -> uuid.UUID: ...
+    @property
+    def classification(self) -> Classification: ...
+    @property
+    def acl_subjects(self) -> Sequence[str]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class WrittenDocument:
+    document_id: uuid.UUID
+    version_id: uuid.UUID
+    version_number: int
+    is_new: bool
+
+
+async def create_document(
     request: Request,
     ctx: AuthContext,
-    metadata: UploadMetadata,
+    metadata: DocumentSpec,
     validated: ValidatedFile,
     data: bytes,
+    *,
+    resolve_key: Callable[[AsyncSession], Awaitable[str]] | None = None,
+    after_write: Callable[[AsyncSession, WrittenDocument], Awaitable[None]] | None = None,
 ) -> UploadResult:
-    """Store the bytes, then write the rows; delete the stored object if the rows fail."""
+    """Store the bytes, then write the rows; delete the stored object if the rows fail.
+
+    ``resolve_key`` may choose the canonical key inside the transaction (meetings use it to
+    recognise a re-import), and ``after_write`` adds rows in the same transaction."""
     document_id, version_id, file_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     store: ObjectStore = request.app.state.object_store
     key: str | None = None
@@ -257,7 +291,8 @@ async def _create_document(
                     status_code=422,
                     detail=f"{len(unknown)} access-list subject(s) do not exist.",
                 )
-            existing = await lock_document_by_key(s, metadata.canonical_key)
+            canonical_key = await resolve_key(s) if resolve_key else metadata.canonical_key
+            existing = await lock_document_by_key(s, canonical_key)
             version_number = 1
             if existing is not None:
                 _check_new_version_allowed(existing, metadata, validated)
@@ -289,7 +324,7 @@ async def _create_document(
                 organisation_id=ctx.organisation_id,
                 business_unit_id=metadata.business_unit_id,
                 title=metadata.title,
-                canonical_key=metadata.canonical_key,
+                canonical_key=canonical_key,
                 classification=metadata.classification,
                 storage_key=key,
                 file=validated,
@@ -301,6 +336,9 @@ async def _create_document(
                 )
             else:
                 await insert_new_version(s, new, version_number=version_number)
+            if after_write is not None:
+                written = WrittenDocument(document_id, version_id, version_number, existing is None)
+                await after_write(s, written)
             job_id = await create_job(s, ctx.organisation_id, version_id)
     except IntegrityError:
         # Typically a concurrent upload with the same canonical_key won the race.
@@ -327,7 +365,7 @@ async def _create_document(
 
 
 def _check_new_version_allowed(
-    existing: ExistingDocument, metadata: UploadMetadata, validated: ValidatedFile
+    existing: ExistingDocument, metadata: DocumentSpec, validated: ValidatedFile
 ) -> None:
     """A new version may not revive a deleted document or move it to another unit or
     classification (that would silently change who can read the earlier versions), and must

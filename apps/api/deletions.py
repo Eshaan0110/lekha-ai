@@ -3,7 +3,8 @@
 Deleting is two steps. This request hides the document at once (soft delete, in the same
 transaction that records the request), so from the response onward nobody can read or find
 it. The worker then purges its vectors, chunks and stored files and resolves the request.
-Only curators of the document's business unit, cleared for its classification, may delete.
+Only curators of the document's business unit, cleared for its classification, may delete;
+for a meeting, so may its organiser.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from db.deletion import (
     soft_delete_document,
     visible_deletion_request,
 )
+from db.meetings import meeting_organiser
 from db.schema import DeletionStatus
 from db.tenancy import tenant_transaction
 from lekha.auth import CURATOR_ROLE, can_manage
@@ -73,8 +75,14 @@ async def request_deletion(
     now = datetime.now(UTC)
     async with tenant_transaction(request.app.state.session_factory, ctx.organisation_id) as s:
         document = await lock_live_document(s, body.document_id)
-        allowed = document is not None and can_manage(
-            ctx, business_unit_id=document.business_unit_id, classification=document.classification
+        allowed = document is not None and (
+            can_manage(
+                ctx,
+                business_unit_id=document.business_unit_id,
+                classification=document.classification,
+            )
+            # A meeting's organiser may delete their own meeting.
+            or await meeting_organiser(s, document.document_id) == ctx.user_id
         )
         if not allowed:
             # Readers learn they may not delete; everyone else can't tell it exists.

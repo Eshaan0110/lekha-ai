@@ -143,6 +143,8 @@ async def replace_chunks(
                     "heading_path": list(chunk.heading_path),
                     "language": chunk.language.value,
                     "embedding_model": embedding_model,
+                    "start_ms": chunk.start_ms,
+                    "end_ms": chunk.end_ms,
                 }
                 for chunk, point_id in zip(chunks, point_ids, strict=True)
             ],
@@ -159,6 +161,8 @@ class SearchableChunk:
     text: str
     language: str
     heading_path: tuple[str, ...]
+    start_ms: int | None  # meetings: where in the meeting the passage starts
+    kind: str  # "document" or "meeting"
 
 
 async def readable_chunks(
@@ -178,8 +182,11 @@ async def readable_chunks(
             ChunkRecord.text,
             ChunkRecord.language,
             ChunkRecord.heading_path,
+            ChunkRecord.start_ms,
+            DocumentFile.media_type,
         )
         .join(DocumentVersion, DocumentVersion.id == ChunkRecord.document_version_id)
+        .join(DocumentFile, DocumentFile.id == DocumentVersion.file_id)
         .join(
             Document,
             and_(
@@ -190,8 +197,16 @@ async def readable_chunks(
         .where(ChunkRecord.id.in_(chunk_ids), readable_condition(ctx, now=now))
     )
     return {
-        r[0]: SearchableChunk(r[0], r[1], r[2], r[3], r[4], r[5], r[6], tuple(r[7])) for r in rows
+        r[0]: SearchableChunk(
+            r[0], r[1], r[2], r[3], r[4], r[5], r[6], tuple(r[7]), r[8], _kind(r[9])
+        )
+        for r in rows
     }
+
+
+def _kind(media_type: str) -> str:
+    is_meeting = media_type == MEDIA_TYPES[FileKind.TRANSCRIPT]
+    return "meeting" if is_meeting else "document"
 
 
 async def visible_job(

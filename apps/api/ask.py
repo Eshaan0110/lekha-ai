@@ -46,7 +46,7 @@ from lekha.generation import (
     render_user_prompt,
     verify,
 )
-from lekha.ingestion import Language, detect_language
+from lekha.ingestion import Language, detect_language, moment_of_quote
 from model_layer import Embedder, LanguageModel, LanguageModelError, LlmRequest, LlmResponse
 
 logger = structlog.get_logger("lekha.ask")
@@ -73,6 +73,8 @@ class CitationOut(BaseModel):
     heading_path: list[str]
     chunk_id: uuid.UUID
     span: str
+    kind: str = "document"  # "document" or "meeting"
+    start_ms: int | None = None  # meetings: where the cited passage starts
 
 
 class AskResponse(BaseModel):
@@ -274,12 +276,21 @@ async def _answer(
                 heading_path=list(c.source.heading_path),
                 chunk_id=c.source.chunk_id,
                 span=c.span,
+                kind=c.source.kind,
+                start_ms=_moment(c.source, c.span),
             )
             for c in outcome.citations
         ],
         language=language,
         model=llm_reply.model if llm_reply else None,
     )
+
+
+def _moment(source: SourceBlock, span: str) -> int | None:
+    """For meetings, the time of the turn that contains the quote (else the chunk start)."""
+    if source.kind != "meeting":
+        return None
+    return moment_of_quote(source.text, span) or source.start_ms
 
 
 def _sources(found: Retrieved) -> list[SourceBlock]:
@@ -294,6 +305,8 @@ def _sources(found: Retrieved) -> list[SourceBlock]:
             heading_path=c.chunk.heading_path,
             language=c.chunk.language,
             text=c.chunk.text,
+            kind=c.chunk.kind,
+            start_ms=c.chunk.start_ms,
         )
         for number, c in enumerate(found.candidates, start=1)
     ]

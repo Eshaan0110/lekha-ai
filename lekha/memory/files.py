@@ -18,11 +18,15 @@ from enum import StrEnum
 class FileKind(StrEnum):
     PDF = "pdf"
     DOCX = "docx"
+    # A meeting transcript in Lekha's canonical JSON form (lekha.ingestion.transcript).
+    # Only the meetings endpoint creates these; document uploads never accept them.
+    TRANSCRIPT = "transcript"
 
 
 MEDIA_TYPES: dict[FileKind, str] = {
     FileKind.PDF: "application/pdf",
     FileKind.DOCX: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    FileKind.TRANSCRIPT: "application/vnd.lekha.transcript+json",
 }
 _EXTENSIONS: dict[str, FileKind] = {".pdf": FileKind.PDF, ".docx": FileKind.DOCX}
 

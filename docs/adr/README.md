@@ -20,5 +20,6 @@ and when we would revisit it. Statuses: **Proposed** (awaiting owner approval),
 | [0012](0012-embeddings-runtime.md) | Embedding models and how they run locally (BGE-M3 via ONNX Runtime) | Accepted (2026-10-21) |
 | [0013](0013-language-models-and-grounding.md) | Language models and the grounding rules for answers | Accepted (2026-10-21) |
 | [0014](0014-hybrid-retrieval.md) | Hybrid retrieval (meaning + keywords) with reciprocal rank fusion | Accepted (2026-10-21) |
+| [0015](0015-meeting-memory.md) | Meeting memory stored as documents, readable only by participants | Proposed |
 
 Template: copy any ADR and keep every heading.

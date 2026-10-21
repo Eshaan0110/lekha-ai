@@ -76,6 +76,8 @@ def _extract_docx(data: bytes) -> list[Section]:
 
 
 def extract_sections(kind: FileKind, data: bytes) -> list[Section]:
+    if kind is FileKind.TRANSCRIPT:
+        raise ValueError("transcripts are chunked by lekha.ingestion.transcript")
     sections = _extract_pdf(data) if kind is FileKind.PDF else _extract_docx(data)
     if sum(len(s.text) for s in sections) < MIN_EXTRACTED_CHARS:
         raise ExtractionError("no_text_layer")  # e.g. a scanned PDF; OCR comes later

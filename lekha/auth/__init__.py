@@ -14,7 +14,13 @@ from lekha.auth.identity import (
     VerifiedIdentity,
 )
 from lekha.auth.model import AccessLevel, AclSource, Classification, SubjectKind
-from lekha.auth.upload import CURATOR_ROLE, UploadDenial, can_manage, upload_denial
+from lekha.auth.upload import (
+    CURATOR_ROLE,
+    UploadDenial,
+    can_manage,
+    meeting_import_denial,
+    upload_denial,
+)
 
 __all__ = [
     "CURATOR_ROLE",
@@ -36,6 +42,7 @@ __all__ = [
     "can_manage",
     "can_read",
     "group_badge",
+    "meeting_import_denial",
     "role_badge",
     "upload_denial",
     "user_badge",

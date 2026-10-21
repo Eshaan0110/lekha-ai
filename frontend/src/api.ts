@@ -12,6 +12,8 @@ export interface Citation {
   heading_path: string[];
   chunk_id: string;
   span: string;
+  kind: "document" | "meeting";
+  start_ms: number | null;
 }
 
 export interface AskResult {
@@ -32,6 +34,21 @@ export interface Passage {
   heading_path: string[];
   language: string;
   text: string;
+  kind: "document" | "meeting";
+  start_ms: number | null;
+}
+
+export interface MeetingItem {
+  id: string;
+  document_id: string;
+  title: string;
+  started_at: string;
+  version_number: number;
+  participants: string[];
+}
+
+export interface MeetingDetail extends MeetingItem {
+  transcript: { at: string | null; start_ms: number | null; speaker: string | null; text: string }[];
 }
 
 export interface Me {
@@ -118,6 +135,21 @@ export const api = {
   },
 
   job: (user: string, jobId: string) => call<Job>(user, `/ingestion-jobs/${jobId}`),
+
+  meetings: (user: string) => call<MeetingItem[]>(user, "/meetings"),
+
+  meeting: (user: string, id: string) => call<MeetingDetail>(user, `/meetings/${id}`),
+
+  importMeeting: (user: string, file: File, metadata: Record<string, unknown>) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("metadata", JSON.stringify(metadata));
+    return call<{ meeting_id: string; version_number: number; ingestion_job_id: string; turns: number }>(
+      user,
+      "/meetings",
+      { method: "POST", body: form },
+    );
+  },
 
   /** Ask with live progress. Resolves with the verified answer. */
   async ask(user: string, question: string, onStage: (stage: string, data: Record<string, unknown>) => void): Promise<AskResult> {

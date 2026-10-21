@@ -31,3 +31,14 @@ const REASONS: Record<string, string> = {
 export function explainAbstention(reason: string | null): string {
   return (reason && REASONS[reason]) || "Lekha couldn't find enough evidence to answer.";
 }
+
+/** "12:40" or "1:02:05", the way the meeting player would show it. */
+export function formatMs(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
+  return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
+}
