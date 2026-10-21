@@ -14,12 +14,19 @@ import structlog
 from fastapi import FastAPI
 from redis.asyncio import Redis
 
-from apps.api import deletions, health, routes_v1, search, uploads
+from apps.api import ask, deletions, health, routes_v1, search, uploads
 from apps.api.audit import AuditMiddleware
 from apps.api.errors import register_error_handlers
 from apps.api.middleware import RequestContextMiddleware
+from apps.api.ratelimit import RateLimiter, RedisRateLimiter
 from apps.api.readiness import build_readiness_checks
-from apps.wiring import ArqJobQueue, JobQueue, build_embedder, build_vector_index
+from apps.wiring import (
+    ArqJobQueue,
+    JobQueue,
+    build_embedder,
+    build_language_model,
+    build_vector_index,
+)
 from db.audit import PostgresAuditSink
 from db.engine import create_engine, create_session_factory
 from db.idempotency import IdempotencyStore
@@ -30,6 +37,7 @@ from lekha.core.health import ReadinessCheck
 from lekha.core.log import configure_logging
 from lekha.memory import ObjectStore
 from lekha.memory.s3_store import S3ObjectStore
+from model_layer import LanguageModel
 
 EXTERNAL_CALL_TIMEOUT = httpx.Timeout(5.0, connect=2.0)
 IDEMPOTENCY_TTL = timedelta(hours=24)
@@ -45,6 +53,8 @@ def create_app(
     audit_sink: AuditSink | None = None,
     object_store: ObjectStore | None = None,
     job_queue: JobQueue | None = None,
+    language_model: LanguageModel | None = None,
+    ask_limiter: RateLimiter | None = None,
 ) -> FastAPI:
     """Build the API. Tests may inject settings, readiness checks, audit sink and store."""
     settings = settings or Settings()  # values come from the environment
@@ -76,6 +86,12 @@ def create_app(
         app.state.embedder = embedder
         app.state.vector_index = build_vector_index(settings, embedder.dimensions)
         app.state.job_queue = job_queue or ArqJobQueue(settings)
+        app.state.language_model = language_model or build_language_model(settings)
+        app.state.ask_limiter = ask_limiter or RedisRateLimiter(
+            redis,
+            namespace=f"lekha:{settings.postgres_db}",
+            limit_per_minute=settings.ask_rate_limit_per_minute,
+        )
         app.state.idempotency = IdempotencyStore(
             app.state.session_factory, ttl=IDEMPOTENCY_TTL, stale_after=IDEMPOTENCY_STALE_AFTER
         )
@@ -91,6 +107,8 @@ def create_app(
             await http.aclose()
             await app.state.vector_index.close()
             await app.state.job_queue.close()
+            if app.state.language_model is not None:
+                await app.state.language_model.close()
             await redis.aclose()
             await engine.dispose()
             logger.info("api_stopped")
@@ -115,6 +133,7 @@ def create_app(
     app.include_router(uploads.router)
     app.include_router(search.router)
     app.include_router(deletions.router)
+    app.include_router(ask.router)
     return app
 
 

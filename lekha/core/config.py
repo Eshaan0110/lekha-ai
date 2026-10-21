@@ -106,6 +106,10 @@ class Settings(BaseSettings):
     bedrock_model_id: str = Field(default="", max_length=200)
     llm_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
     llm_max_output_tokens: int = Field(default=800, ge=64, le=4096)
+    ask_top_k: int = Field(default=8, ge=1, le=20)  # sources given to the model
+    # Overrides the embedder's own relevance floor (below it, Lekha abstains).
+    ask_min_relevance: float | None = Field(default=None, ge=0, le=1)
+    ask_rate_limit_per_minute: int = Field(default=10, ge=1, le=1000)
 
     auth_mode: AuthMode = AuthMode.OIDC
     # The synthetic organisation the dev adapter signs users into (see seed_dev_data).

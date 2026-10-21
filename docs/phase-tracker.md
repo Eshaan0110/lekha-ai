@@ -92,7 +92,7 @@ Owner GO 2026-10-21. Plan approved with the recommended D1–D6: [design/phase-3
 | 1. Model layer (LLM interface, Ollama, Bedrock) | Tested | `test_llm_adapters.py` (Ollama via fake server; Bedrock via botocore Stubber, never live); config guards in `test_config.py` |
 | 2. Generation core (fenced prompt, citation verifier, abstention) | Tested | `test_generation.py`; import contract keeps `lekha.generation` pure |
 | 3. Hybrid retrieval (Postgres full-text + RRF) | Tested | Migration 0007; `test_keyword_search_finds_exact_codes_and_obeys_permissions`; red team still 0 anomalies; BGE-M3 exact-code recall 87% → **100%** with hybrid |
-| 4. `/api/v1/ask`, logs, rate limit | Not started | |
+| 4. `/api/v1/ask`, logs, rate limit | Tested | Migration 0008 (query_log, answer_log, citation, RLS); `test_ask.py` (13): cited answers name their version; the model is never shown unreadable text (prompts captured); abstains without calling the model on no/weak evidence; invented or unparseable replies never returned; 503 on model outage or none configured; per-user Redis rate limit fails closed (429/503); deletion wipes logged answers that quoted the document |
 | 5. Golden set and evaluation | Not started | |
 
 ## Phases 4–7

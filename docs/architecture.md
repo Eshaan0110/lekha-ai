@@ -32,6 +32,9 @@ db/documents.py      Writes for new uploads (document, file, version, guest list
 lekha/memory/        Upload validation (pure), object-store interface, S3 adapter
 apps/api/uploads.py  POST /api/v1/documents
 apps/api/search.py   POST /api/v1/search, GET /api/v1/ingestion-jobs/{id}
+apps/api/ask.py      POST /api/v1/ask: retrieve → prompt → model → verify → log
+apps/api/ratelimit.py  Per-user fixed-window limit in Redis (fails closed)
+db/answers.py        query_log, answer_log, citation writes; redaction on deletion
 apps/api/retrieval.py  Shared retrieval: permission-filtered dense + keyword search, RRF, DB re-check
 db/search.py         Keyword (full-text) search, permission rule in SQL
 lekha/generation/    Fixed prompt, citation verifier, abstention (pure)
@@ -121,6 +124,7 @@ request ID, and turned into a generic `500 internal_error` envelope.
 | `GET /api/v1/documents?limit=&cursor=` | Documents the caller may read (cursor-paged) | Signed in |
 | `GET /api/v1/documents/{id}` | One document; `404` if missing **or** not visible | Signed in |
 | `POST /api/v1/search` | Permission-filtered search by meaning (`query`, `limit`) | Signed in |
+| `POST /api/v1/ask` | Grounded answer with verified citations, or an abstention with its reason; rate-limited per user | Signed in |
 | `GET /api/v1/ingestion-jobs/{id}` | Processing status of an upload | Curator of the unit, or a reader of the document |
 | `POST /api/v1/documents` | Upload a PDF/DOCX (multipart `file` + `metadata` JSON); an existing `canonical_key` adds a new version; optional `Idempotency-Key` header for safe retries | Curator in the business unit |
 | `POST /api/v1/deletion-requests` | Delete a document: hidden at once, derived data purged by the worker | Curator of the document's unit, cleared for it |

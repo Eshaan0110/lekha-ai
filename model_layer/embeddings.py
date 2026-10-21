@@ -24,6 +24,9 @@ _WORD = re.compile(r"\w+", re.UNICODE)
 class Embedder(Protocol):
     model_name: str
     dimensions: int
+    # Cosine similarity below which a match is too weak to answer from. Each model's scores
+    # live on its own scale, so the default is per model (calibrated on the golden set).
+    min_relevance: float
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """One unit-length vector per text, in order."""
@@ -33,6 +36,7 @@ class Embedder(Protocol):
 class FakeEmbedder:
     model_name = "fake-hash-v1"
     dimensions = DIMENSIONS
+    min_relevance = 0.1
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         return [self._one(text) for text in texts]

@@ -46,6 +46,10 @@ a recorded manual check proves it.
 | Deletion | Only curators of the unit, cleared for the classification; the document is hidden in the same transaction that records the request; vectors, chunks and files are purged; tombstone and audit event kept; non-curators who can read get 403, others 404 | `test_deleting_a_document_hides_it_at_once_then_purges_everything`, `test_who_may_change_or_delete_a_document` |
 | Versions can't widen access to old versions | A new version must keep the document's unit and classification; it becomes current only after indexing | `test_a_new_version_cannot_change_who_may_read_the_old_ones`, `test_a_new_version_takes_over_only_once_it_is_indexed` |
 | Model integrity | Embedding model files are checked against pinned SHA-256 before loading | `test_unexpected_weights_are_refused`, `test_bge_m3_refuses_files_that_fail_their_checksum` |
+| Grounded answers only | The model sees only permission-filtered chunks, fenced as data; every citation's quote must appear in its source; no verified citation → abstain; no/weak evidence → abstain without calling the model | `test_ask.py`, `test_generation.py` |
+| Answer logs | Question and answer text stored in `query_log`/`answer_log` (tenant RLS), never in application logs; answers quoting a deleted document are wiped | `test_deleting_a_document_wipes_logged_answers_that_quoted_it` |
+| Local model stays local | Ollama URL must be loopback; cloud model tags refused; Ollama refused in staging/production | `test_config.py` |
+| Abuse and cost control | `/ask` limited per user per minute; Redis outage refuses rather than lets through | `test_rate_limits_fail_closed`, `test_the_redis_limiter_counts_per_user` |
 | Interactive API docs off outside local/test | `/docs` and `/openapi.json` disabled in staging/production | `test_interactive_docs_are_disabled_in_production` |
 
 ## Not yet implemented (Phase 1, later slices)

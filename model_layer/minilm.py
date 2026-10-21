@@ -40,6 +40,7 @@ Array = NDArray[np.float32]
 class MiniLmEmbedder:
     model_name = MODEL_NAME
     dimensions = DIMENSIONS
+    min_relevance = 0.3
 
     def __init__(self, model_dir: Path) -> None:
         weights_path, tokenizer_path = model_dir / "model.safetensors", model_dir / "tokenizer.json"
