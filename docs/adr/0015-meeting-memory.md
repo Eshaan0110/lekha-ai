@@ -1,6 +1,6 @@
 # ADR-0015: Meeting memory stored as documents, readable only by participants
 
-- **Status:** Proposed (needs the owner's acceptance)
+- **Status:** Accepted by the owner on 2026-10-21
 - **Date:** 2026-10-21
 
 ## Context
