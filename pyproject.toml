@@ -135,3 +135,9 @@ type = "forbidden"
 source_modules = ["lekha.ingestion", "lekha.retrieval"]
 forbidden_modules = ["apps", "db", "sqlalchemy", "fastapi"]
 
+[[tool.importlinter.contracts]]
+name = "Answer generation is pure: no database, web framework, network client or model vendor"
+type = "forbidden"
+source_modules = ["lekha.generation"]
+forbidden_modules = ["apps", "db", "model_layer", "sqlalchemy", "fastapi", "starlette", "httpx", "boto3", "botocore"]
+
