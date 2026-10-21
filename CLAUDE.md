@@ -596,5 +596,8 @@ on CPU). The Phase 2 report is written
 ADR-0012 accepted. The Phase 3 plan
 ([`docs/design/phase-3-plan.md`](docs/design/phase-3-plan.md)) is approved with the recommended
 D1–D6 (local Ollama + fake LLM for tests, hybrid retrieval now, reranker deferred, Bedrock
-adapter with stubbed tests, UI deferred, 100-question golden set). Building. Commit rule: one commit per finished piece of
+adapter with stubbed tests, UI deferred, 100-question golden set). Build work is complete and
+the Phase 3 report is written ([`docs/reports/phase-3-report.md`](docs/reports/phase-3-report.md)):
+all quality and security targets met on the synthetic golden set, p95 latency not met on the
+laptop. Waiting for the owner's go/no-go before Phase 4. Commit rule: one commit per finished piece of
 work, push only when the owner says.

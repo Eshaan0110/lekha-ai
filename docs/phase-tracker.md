@@ -85,7 +85,7 @@ be downloaded; it understands English only, so Kannada search waits for BGE-M3.
 
 ## Phase 3 — Grounded Q&A (local, synthetic data only)
 
-Owner GO 2026-10-21. Plan approved with the recommended D1–D6: [design/phase-3-plan.md](design/phase-3-plan.md). Building.
+**Build work complete; end-of-phase report written ([reports/phase-3-report.md](reports/phase-3-report.md)); awaiting owner go/no-go for Phase 4.** Owner GO 2026-10-21. Plan approved with the recommended D1–D6: [design/phase-3-plan.md](design/phase-3-plan.md). Building.
 
 | Step | Status | Evidence |
 |---|---|---|
