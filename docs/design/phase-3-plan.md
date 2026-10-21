@@ -1,6 +1,6 @@
 # Phase 3 plan: grounded Q&A (proposal)
 
-- **Status:** Proposed. Waiting for the owner's decisions D1–D6 below.
+- **Status:** Approved by the owner on 2026-10-21 with the recommended D1–D6.
 - **Date:** 2026-10-21
 - **Scope:** local, **synthetic documents only** (owner's GO of 2026-10-21). Hindi stays
   deferred.

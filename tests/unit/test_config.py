@@ -63,3 +63,33 @@ def test_settings_are_immutable(make_settings: Callable[..., Settings]) -> None:
     settings = make_settings()
     with pytest.raises(ValidationError):
         settings.postgres_port = 1  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("url", ["http://10.0.0.5:11434", "https://ollama.example.com"])
+def test_the_local_model_must_run_on_this_machine(
+    make_settings: Callable[..., Settings], url: str
+) -> None:
+    with pytest.raises(ValidationError, match="this machine"):
+        make_settings(ollama_url=url)
+
+
+@pytest.mark.parametrize("model", ["qwen3.5:cloud", "gpt-oss:120b-cloud"])
+def test_cloud_models_are_refused(make_settings: Callable[..., Settings], model: str) -> None:
+    with pytest.raises(ValidationError, match="local model"):
+        make_settings(ollama_model=model)
+
+
+def test_bedrock_needs_a_model_id(make_settings: Callable[..., Settings]) -> None:
+    with pytest.raises(ValidationError, match="BEDROCK_MODEL_ID"):
+        make_settings(llm="bedrock")
+
+
+def test_the_development_model_is_refused_in_production(
+    make_settings: Callable[..., Settings],
+) -> None:
+    with pytest.raises(ValidationError, match="local development model"):
+        make_settings(environment="production", log_format="json", llm="ollama")
+
+
+def test_no_model_is_configured_by_default(make_settings: Callable[..., Settings]) -> None:
+    assert make_settings().llm == "none"

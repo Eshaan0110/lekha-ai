@@ -593,5 +593,8 @@ on CPU). The Phase 2 report is written
 ([`docs/reports/phase-2-report.md`](docs/reports/phase-2-report.md)).
 
 **Phase 3 (2026-10-21):** owner GO for local development with **synthetic documents only**;
-ADR-0012 accepted. The Phase 3 plan must be proposed and approved before building. Commit rule: one commit per finished piece of
+ADR-0012 accepted. The Phase 3 plan
+([`docs/design/phase-3-plan.md`](docs/design/phase-3-plan.md)) is approved with the recommended
+D1–D6 (local Ollama + fake LLM for tests, hybrid retrieval now, reranker deferred, Bedrock
+adapter with stubbed tests, UI deferred, 100-question golden set). Building. Commit rule: one commit per finished piece of
 work, push only when the owner says.

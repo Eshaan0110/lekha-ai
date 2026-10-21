@@ -85,7 +85,7 @@ be downloaded; it understands English only, so Kannada search waits for BGE-M3.
 
 ## Phase 3 — Grounded Q&A (local, synthetic data only)
 
-Owner GO 2026-10-21. Plan proposed: [design/phase-3-plan.md](design/phase-3-plan.md), waiting for decisions D1–D6. Nothing built yet.
+Owner GO 2026-10-21. Plan approved with the recommended D1–D6: [design/phase-3-plan.md](design/phase-3-plan.md). Building.
 
 ## Phases 4–7
 

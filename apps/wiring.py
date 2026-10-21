@@ -10,7 +10,15 @@ from arq.connections import ArqRedis, RedisSettings
 
 from lekha.core.config import Settings
 from lekha.retrieval import QdrantIndex
-from model_layer import BgeM3Embedder, Embedder, FakeEmbedder, MiniLmEmbedder
+from model_layer import (
+    BedrockClaudeModel,
+    BgeM3Embedder,
+    Embedder,
+    FakeEmbedder,
+    LanguageModel,
+    MiniLmEmbedder,
+    OllamaModel,
+)
 
 INGEST_FUNCTION = "ingest"
 PURGE_FUNCTION = "purge"
@@ -22,6 +30,23 @@ def build_embedder(settings: Settings) -> Embedder:
     if settings.embedder == "minilm":
         return MiniLmEmbedder(settings.minilm_model_dir)
     return FakeEmbedder()
+
+
+def build_language_model(settings: Settings) -> LanguageModel | None:
+    """None when no model is configured: /api/v1/ask then answers 503."""
+    if settings.llm == "ollama":
+        return OllamaModel(
+            str(settings.ollama_url),
+            settings.ollama_model,
+            timeout_seconds=settings.llm_timeout_seconds,
+        )
+    if settings.llm == "bedrock":
+        return BedrockClaudeModel.connect(
+            settings.bedrock_region,
+            settings.bedrock_model_id,
+            timeout_seconds=settings.llm_timeout_seconds,
+        )
+    return None
 
 
 def build_vector_index(settings: Settings, dimensions: int) -> QdrantIndex:

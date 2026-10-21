@@ -90,6 +90,20 @@ class Settings(BaseSettings):
     minilm_model_dir: Path = Path("models/all-MiniLM-L6-v2")
     embedder_device: Literal["cpu", "cuda"] = "cpu"
 
+    # Language model for answers (Phase 3). "none" means /api/v1/ask answers 503 until one is
+    # configured. "ollama" is a local development model on this machine only; "bedrock" is
+    # the production default (Claude via AWS Bedrock Mumbai), blocked until the AWS account
+    # exists. Tests inject a fake model directly.
+    llm: Literal["none", "ollama", "bedrock"] = "none"
+    ollama_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:11434")
+    ollama_model: str = Field(
+        default="qwen3.5:9b", pattern=r"^[a-z0-9][a-z0-9._-]*(:[a-z0-9._-]+)?$"
+    )
+    bedrock_region: str = Field(default="ap-south-1", pattern=r"^[a-z]{2}-[a-z]+-\d$")
+    bedrock_model_id: str = Field(default="", max_length=200)
+    llm_timeout_seconds: float = Field(default=120.0, gt=0, le=600)
+    llm_max_output_tokens: int = Field(default=800, ge=64, le=4096)
+
     auth_mode: AuthMode = AuthMode.OIDC
     # The synthetic organisation the dev adapter signs users into (see seed_dev_data).
     dev_auth_organisation_id: uuid.UUID | None = None
@@ -142,10 +156,24 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _local_models_stay_local(self) -> Self:
+        # Ollama can proxy "cloud" models and listen on other hosts; either would send
+        # document text off this machine.
+        if self.ollama_url.host not in {"127.0.0.1", "localhost", "::1", "[::1]"}:
+            raise ValueError("LEKHA_OLLAMA_URL must point at this machine (127.0.0.1)")
+        if "cloud" in self.ollama_model.split(":")[-1] or self.ollama_model.endswith("-cloud"):
+            raise ValueError("LEKHA_OLLAMA_MODEL must be a local model, not a cloud one")
+        if self.llm == "bedrock" and not self.bedrock_model_id:
+            raise ValueError("LEKHA_LLM=bedrock requires LEKHA_BEDROCK_MODEL_ID")
+        return self
+
+    @model_validator(mode="after")
     def _production_guards(self) -> Self:
         if self.environment in {Environment.STAGING, Environment.PRODUCTION}:
             if self.log_format is not LogFormat.JSON:
                 raise ValueError("staging/production require LEKHA_LOG_FORMAT=json")
             if self.log_level == "DEBUG":
                 raise ValueError("DEBUG logging is not allowed in staging/production")
+            if self.llm == "ollama":
+                raise ValueError("LEKHA_LLM=ollama is a local development model only")
         return self
