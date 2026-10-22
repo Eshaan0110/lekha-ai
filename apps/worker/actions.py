@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from apps.worker.pipeline import TransientJobError
 from db.actions import execution_target, record_execution
 from db.tenancy import tenant_transaction
+from db.voice import add_outbox, contact_of
 from lekha.actions import ProposalStatus, TicketInputs
 from lekha.connectors import TicketingSystem, TicketingUnavailableError, TicketRejectedError
 
@@ -77,6 +78,18 @@ async def run_action(
             attempts=attempt,
             now=datetime.now(UTC),
         )
+        if recorded and external_id is not None and target.channel == "phone":
+            # Logged on a call: the ticket number goes to the phone registered with HR
+            # (SIMULATED outbox, nothing is sent).
+            contact = await contact_of(s, target.proposed_by)
+            if contact is not None:
+                await add_outbox(
+                    s,
+                    organisation_id,
+                    contact,
+                    "ticket",
+                    f"Lekha: your complaint was approved. Ticket {external_id} (simulated).",
+                )
     status = ProposalStatus.EXECUTED if error_code is None else ProposalStatus.FAILED
     logger.info(
         "action_executed" if error_code is None else "action_failed",

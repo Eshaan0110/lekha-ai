@@ -613,6 +613,6 @@ go/no-go before planning Phase 5.
 ([`docs/design/phase-5-plan.md`](docs/design/phase-5-plan.md)) is approved (2026-10-22) with the
 recommended D1–D6: **Hindi is back in scope**; speech uses fakes first, Sarvam only with the
 owner's authorisation; phone simulator; fake ticketing system; `approver` role; employee ID +
-one-time code, simulated. Paid speech or telephony needs
+one-time code, simulated. Build progress: step 1 (actions: proposals, named approvers, execute-once against a simulated ticketing system) done and pushed; step 2 (voice session core through a phone simulator; ADR-0017 proposed) built and tested. Paid speech or telephony needs
 the owner's explicit authorisation (§13). Commit rule: one commit per finished piece of
 work, push only when the owner says.

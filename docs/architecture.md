@@ -51,6 +51,8 @@ frontend/            React + TypeScript web app (Vite dev server proxies /api to
 lekha/actions/       Action rules (propose, approve, expiry) and the create_ticket tool spec (pure)
 lekha/connectors/    Interfaces to outside systems (ticketing); pure
 apps/api/actions.py, db/actions.py, apps/worker/actions.py  Proposals, approvals, execute-once; SIMULATED ticketing system
+lekha/speech/        Phone call rules (states, limits, intents, ticket drafts, spoken answers) and phrases in kn/hi/en (pure)
+apps/api/voice.py, db/voice.py  Simulated phone line: verification, ask, log, hand-over; SMS outbox (never sent)
 apps/scripts/demo_corpus.py, load_demo.py  Synthetic demo corpus and its loader (through the API)
 tests/unit/          Fast tests, no Docker required
 tests/integration/   Tests against the real local Docker stack
@@ -58,8 +60,7 @@ infra/local/         Docker Compose for the local stack
 dev.ps1              Repeatable developer commands
 ```
 
-Not yet created (by design — created when their phase starts): `lekha/speech` (Phase 5
-step 3) and `lekha/mcp` (Phase 6).
+Not yet created (by design — created when their phase starts): `lekha/mcp` (Phase 6).
 
 ### Deviations from the planned structure (CLAUDE.md §4.3)
 
@@ -82,7 +83,7 @@ flowchart LR
 
 - `lekha` and `db` must never import `apps` (entry points depend on business code, never the reverse).
 - `lekha.core` must not import `db` (configuration and logging stay free of ORM concerns).
-- `lekha.auth`, `lekha.audit`, `lekha.actions` and `lekha.connectors` must not import `db`, `apps`, SQLAlchemy, FastAPI, or any network client: permission and action rules stay pure and unit-testable.
+- `lekha.auth`, `lekha.audit`, `lekha.actions`, `lekha.connectors` and `lekha.speech` must not import `db`, `apps`, SQLAlchemy, FastAPI, or any network client: permission and action rules stay pure and unit-testable.
 - `model_layer` must not import `lekha` (contract added when `model_layer` is created).
 
 ## Request flow (today)
@@ -144,6 +145,8 @@ request ID, and turned into a generic `500 internal_error` envelope.
 | `POST /api/v1/actions/propose` | Propose an action (only `create_ticket`); nothing runs until approved; optional `Idempotency-Key` | Anyone with a role in the unit |
 | `GET /api/v1/actions`, `GET /api/v1/actions/{id}` | Proposals in units you approve for, plus your own | Signed in |
 | `POST /api/v1/actions/{id}/approve`, `…/reject` | Decide (approve with optional edits, re-validated; reject with a reason); the worker then creates the ticket once | `approver` of the unit, never the proposer |
+| `POST /api/v1/voice/calls`, `POST …/{id}/say`, `POST …/{id}/hangup`, `GET …/{id}` | SIMULATED phone line (stands in for the telephony webhook): consent, HR number + one-time code, then ask / log / status, or hand-over | None (anonymous until verified); exists only with development sign-in (local/test) |
+| `GET /api/v1/voice/outbox`, `GET /api/v1/voice/escalations` | Simulated SMS outbox (never sent) and human hand-over queue | Development sign-in only |
 | `GET /api/v1/audit?limit=&cursor=` | Audit trail of activity by people in your audit units | `audit_reader` |
 | `GET /api/v1/ingestion-jobs/{id}` | Processing status of an upload | Curator of the unit, or a reader of the document |
 | `POST /api/v1/documents` | Upload a PDF/DOCX (multipart `file` + `metadata` JSON); an existing `canonical_key` adds a new version; optional `Idempotency-Key` header for safe retries | Curator in the business unit |

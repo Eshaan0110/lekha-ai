@@ -173,6 +173,8 @@ class ExecutionTarget:
     idempotency_key: str
     status: ProposalStatus
     already_executed: bool
+    proposed_by: uuid.UUID
+    channel: str | None  # where the proposal came from, e.g. "phone"
 
 
 async def execution_target(session: AsyncSession, proposal_id: uuid.UUID) -> ExecutionTarget | None:
@@ -193,6 +195,8 @@ async def execution_target(session: AsyncSession, proposal_id: uuid.UUID) -> Exe
         idempotency_key=proposal.idempotency_key,
         status=proposal.status,
         already_executed=execution_id is not None,
+        proposed_by=proposal.proposed_by,
+        channel=proposal.derived_from.get("channel"),
     )
 
 

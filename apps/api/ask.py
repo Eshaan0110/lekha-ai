@@ -189,6 +189,14 @@ async def ask_stream(request: Request, ctx: CurrentUser, body: AskRequest) -> St
     return StreamingResponse(stream(), media_type="text/event-stream", headers=headers)
 
 
+async def answer_question(request: Request, ctx: AuthContext, question: str) -> AskResponse:
+    """The same pipeline as /ask, for another channel (the phone line) acting as the
+    verified caller. Raises HTTPException 429/503 as /ask does, and LanguageModelError if
+    the model fails while answering."""
+    prepared = await _prepare(request, ctx, question)
+    return await _answer(request, ctx, question, prepared, _no_progress)
+
+
 def _sse(event: str, data: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 

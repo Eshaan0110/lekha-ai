@@ -24,6 +24,14 @@ from db.schema.identity import (
 from db.schema.ingestion import ChunkRecord, IngestionJob, IngestionStatus
 from db.schema.meetings import Meeting, MeetingMinutes, MeetingParticipant, MinutesStatus
 from db.schema.support import QuestionRequest, RequestStatus
+from db.schema.voice import (
+    EmployeeContact,
+    Escalation,
+    OutboxMessage,
+    VerificationCode,
+    VoiceCall,
+    VoiceTurn,
+)
 
 __all__ = [
     "ActionApproval",
@@ -42,6 +50,8 @@ __all__ = [
     "DocumentAcl",
     "DocumentFile",
     "DocumentVersion",
+    "EmployeeContact",
+    "Escalation",
     "GlossaryEntry",
     "GlossaryName",
     "IdempotencyRecord",
@@ -53,6 +63,7 @@ __all__ = [
     "MeetingParticipant",
     "MinutesStatus",
     "Organisation",
+    "OutboxMessage",
     "PermissionSubject",
     "QueryLog",
     "QuestionRequest",
@@ -61,4 +72,7 @@ __all__ = [
     "SimulatedTicket",
     "SourceSystem",
     "UserRoleGrant",
+    "VerificationCode",
+    "VoiceCall",
+    "VoiceTurn",
 ]

@@ -90,6 +90,8 @@ curl -H "X-Dev-User: dev|asha" http://127.0.0.1:8000/api/v1/documents
 | `dev|hari` | no documents; **approves** Alpha's ticket proposals (approver) |
 | `dev|uma` | no documents; **approves** Beta's ticket proposals (approver) |
 | `dev|kiran`, `dev|nobody` | nothing |
+
+Every synthetic user also has a synthetic HR number and registered phone for the phone simulator, in this order: asha `MG-10001` (`+910000000001`), meera `MG-10002`, ravi `MG-10003`, chitra `MG-10004`, bina `MG-10005`, tara `MG-10006`, hari `MG-10007`, uma `MG-10008`, kiran `MG-10009`, nobody `MG-10010`, inactive `MG-10011`. A simulated call: `POST /api/v1/voice/calls` with `{"caller_number": "+919999900000"}`, then `POST /api/v1/voice/calls/{id}/say` with `{"text": "MG-10001"}`; read the code from `GET /api/v1/voice/outbox?phone=%2B910000000001` and say it. Nothing is ever sent.
 | `dev|inactive` | cannot sign in (401) |
 
 Why each user sees what they see is explained in `apps/scripts/seed_dev_data.py`.

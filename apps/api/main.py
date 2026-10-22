@@ -25,6 +25,7 @@ from apps.api import (
     search,
     support,
     uploads,
+    voice,
 )
 from apps.api.audit import AuditMiddleware
 from apps.api.errors import register_error_handlers
@@ -149,6 +150,7 @@ def create_app(
     app.include_router(glossary.router)
     app.include_router(support.router)
     app.include_router(actions.router)
+    app.include_router(voice.router)
     return app
 
 

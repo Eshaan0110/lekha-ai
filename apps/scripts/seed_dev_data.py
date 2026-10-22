@@ -18,6 +18,10 @@ must allow and a case that must deny.
 | dev|kiran      | viewer @ alpha, grant EXPIRED      | nothing       |
 | dev|nobody     | none                               | nothing       |
 | dev|inactive   | viewer @ alpha, account inactive   | cannot sign in|
+
+Phone verification (Phase 5): every user has a SYNTHETIC HR number and registered phone, in
+the order above: asha MG-10001 / +910000000001, meera MG-10002, ... inactive MG-10011.
+The phones are not real numbers, and nothing is ever sent to them.
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ from db.schema import (
     DocumentAcl,
     DocumentFile,
     DocumentVersion,
+    EmployeeContact,
     Organisation,
     PermissionSubject,
     Role,
@@ -66,6 +71,28 @@ ROLE_CLEARANCE = {
     "approver": Classification.INTERNAL,
     "legal": Classification.CONFIDENTIAL,
 }
+
+
+# Synthetic HR numbers and phones, in seeding order (see the table above).
+SYNTHETIC_USERS = (
+    "asha",
+    "meera",
+    "ravi",
+    "chitra",
+    "bina",
+    "tara",
+    "hari",
+    "uma",
+    "kiran",
+    "nobody",
+    "inactive",
+)
+
+
+def synthetic_contact(name: str) -> tuple[str, str]:
+    """(HR number, registered phone) for a synthetic user."""
+    n = SYNTHETIC_USERS.index(name) + 1
+    return f"MG-{10000 + n}", f"+9100000{n:05d}"
 
 
 @dataclass
@@ -260,6 +287,16 @@ async def seed_synthetic_organisation(
         sd.user(name)
     sd.user("inactive", active=False)
     await session.flush()
+    for name in SYNTHETIC_USERS:
+        hr_number, phone = synthetic_contact(name)
+        sd.add(
+            EmployeeContact(
+                organisation_id=organisation_id,
+                user_id=sd.result.users[name],
+                hr_number=hr_number,
+                phone=phone,
+            )
+        )
 
     sd.grant("asha", "viewer", "bu-alpha")
     sd.grant("meera", "viewer", "bu-alpha")
