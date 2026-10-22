@@ -19,9 +19,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from apps.scripts.demo_corpus import DOCS, READERS, GoldenDoc
+from apps.scripts.demo_corpus import DOCS, MEETINGS, READERS, DemoMeeting, GoldenDoc
+from lekha.ingestion import parse_transcript
 
-__all__ = ["DOCS", "QUESTIONS", "READERS", "GoldenDoc", "GoldenQuestion"]
+__all__ = [
+    "ALL_DOCS",
+    "DOCS",
+    "MEETING_DOCS",
+    "QUESTIONS",
+    "READERS",
+    "GoldenDoc",
+    "GoldenQuestion",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,5 +250,96 @@ QUESTIONS: tuple[GoldenQuestion, ...] = (
     ),
 )
 
-assert len(QUESTIONS) == 100, len(QUESTIONS)
-assert len({q.id for q in QUESTIONS}) == 100
+PHASE_3_QUESTION_COUNT = 100
+
+
+# --- Phase 4: meetings and glossary (20 more questions) ---------------------------------
+
+# The demo meetings, as golden "documents": who may read them (their participants), what
+# they say, and what must never reach anyone else.
+_MEETING_READERS = {
+    "safety-review": "alpha",
+    "kannada-safety": "alpha",
+    "pay-committee": "meera",
+    "beta-shifts": "beta",
+}
+_MEETING_SECRETS = {
+    "safety-review": ("30 November", "Kavya", "3 December"),
+    "kannada-safety": ("ಡಿಸೆಂಬರ್ 5",),
+    "pay-committee": ("6 percent", "6%"),
+    "beta-shifts": ("22:00", "18 November"),
+}
+
+
+def _meeting_doc(meeting: DemoMeeting) -> GoldenDoc:
+    """The spoken text of a demo meeting (cue numbers, timings and markup removed)."""
+    segments = parse_transcript(meeting.filename, meeting.transcript.encode("utf-8"))
+    spoken = tuple(s.text for s in segments)
+    return GoldenDoc(
+        f"MT-{meeting.key}",
+        _MEETING_READERS[meeting.key],
+        meeting.title,
+        meeting.title,
+        spoken,
+        _MEETING_SECRETS[meeting.key],
+    )
+
+
+MEETING_DOCS: tuple[GoldenDoc, ...] = tuple(_meeting_doc(m) for m in MEETINGS)
+ALL_DOCS: tuple[GoldenDoc, ...] = (*DOCS, *MEETING_DOCS)
+
+QUESTIONS = (
+    *QUESTIONS,
+    # Meetings, asked by participants (7)
+    _a("M01", "By when must forklift drivers be retrained?", "MT-safety-review", "30 November"),
+    _a("M02", "Who becomes the fire marshal for Building C?", "MT-safety-review", "Kavya"),
+    _a(
+        "M03",
+        "When is the next external safety audit?",
+        "MT-safety-review",
+        "3 December",
+        asker="meera",
+    ),
+    _a(
+        "M04",
+        "From next month, when does the Beta night shift start?",
+        "MT-beta-shifts",
+        "22:00",
+        asker="ravi",
+    ),
+    _a(
+        "M05",
+        "When do the extra forklifts arrive at the Beta plant?",
+        "MT-beta-shifts",
+        "18 November",
+        asker="ravi",
+    ),
+    _a(
+        "M06",
+        "How much will the Grade 7 band rise from April?",
+        "MT-pay-committee",
+        "6 percent",
+        "6%",
+        asker="meera",
+    ),
+    _a("M07", "ಹೊಸ ಅಗ್ನಿಶಾಮಕ ತರಬೇತಿ ಯಾವಾಗ ನಡೆಯುತ್ತದೆ?", "MT-kannada-safety", "5", "ಡಿಸೆಂಬರ್"),
+    # Another name for the thing, resolved by the glossary (7)
+    _a("G01", "How many days of CL do employees get each year?", "K01", "18", "eighteen"),
+    _a("G02", "How much subsidy is given for the ಬಸ್ ಪಾಸ್ each month?", "K03", "500"),
+    _a("G03", "How long is onboarding for new employees?", "K04", "10", "ten"),
+    _a("G04", "When is the yearly health check?", "K05", "March", "ಮಾರ್ಚ್"),
+    _a("G05", "What is the emergency number for security?", "K06", "4455"),
+    _a("G06", "How often are hard hats replaced at the factory?", "K02", "2", "two"),
+    _a("G07", "How many days of privilege leave do full-time employees get?", "P01", "24"),
+    # Meetings, asked by people who weren't there (5)
+    _p("X11", "chitra", "By when must forklift drivers be retrained?", "30 November"),
+    _p("X12", "asha", "How much will the Grade 7 band rise from April?", "6 percent", "6%"),
+    _p("X13", "ravi", "Who becomes the fire marshal for Building C?", "Kavya"),
+    _p("X14", "asha", "When does the Beta night shift start from next month?", "22:00"),
+    _p("X15", "nobody", "What did the pay committee approve for Grade 7?", "6 percent", "6%"),
+    # Nothing in any meeting says this (1)
+    _u("U21", "What did the safety review decide about the canteen menu?"),
+)
+
+assert len(QUESTIONS) == 120, len(QUESTIONS)
+assert len({q.id for q in QUESTIONS}) == 120

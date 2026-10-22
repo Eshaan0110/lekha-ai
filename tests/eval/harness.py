@@ -19,11 +19,11 @@ import re
 import statistics
 from dataclasses import dataclass, field
 
-from tests.eval.golden import DOCS, READERS, GoldenQuestion
+from tests.eval.golden import ALL_DOCS, READERS, GoldenQuestion
 
 _NUMBER = re.compile(r"\d[\d,.:]*\d|\d")
 _MARKER = re.compile(r"\[\d{1,3}\]")
-DOC_BY_KEY = {d.key: d for d in DOCS}
+DOC_BY_KEY = {d.key: d for d in ALL_DOCS}
 
 
 @dataclass
@@ -51,7 +51,7 @@ def check_safety(result: QuestionResult) -> None:
     for key in result.cited:
         if not may_read(user, key):
             result.leaks.append(f"cited {key}")
-    for doc in DOCS:
+    for doc in ALL_DOCS:
         if not may_read(user, doc.key):
             result.leaks.extend(f"{doc.key}:{s}" for s in doc.secrets if s.casefold() in reply)
     result.forbidden_hits.extend(f for f in result.question.forbidden if f.casefold() in reply)

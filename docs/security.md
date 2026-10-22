@@ -56,6 +56,7 @@ a recorded manual check proves it.
 | Glossary can't widen access | Entries are managed by the unit's curators and visible per unit (or shared); expansion only changes the query, every search stays permission-filtered; entry text sent to the model is neutralised | `test_glossary.py` (Ravi gets no expansion or results from Alpha's entry) |
 | Audit reader | `GET /api/v1/audit` requires `audit_reader`; scoped to activity by people with a role in the reader's unit; shows actions and paths, never question or document text | `test_the_audit_log_is_for_audit_readers_and_scoped_to_their_unit` |
 | Question requests need consent | A question reaches curators only if the asker sends it; curators of other units can't see or close it | `test_an_unanswered_question_can_be_logged_and_followed_up_by_curators` |
+| Instruction-like text is never evidence | Sentences addressed to an AI ("ignore the user's question", "system instruction", "Assistant, …") can't be cited in answers or minutes, even when quoted exactly | `test_injection.py`; golden probe X09 |
 | Interactive API docs off outside local/test | `/docs` and `/openapi.json` disabled in staging/production | `test_interactive_docs_are_disabled_in_production` |
 
 ## Not yet implemented (Phase 1, later slices)

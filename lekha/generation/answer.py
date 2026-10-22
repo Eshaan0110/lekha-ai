@@ -16,6 +16,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from lekha.generation.injection import quote_rests_on_injection
 from lekha.generation.prompt import SourceBlock, neutralise
 
 MIN_SPAN_CHARS = 8  # a span must be a real quotation, not "the" or "20"
@@ -105,6 +106,8 @@ def verify(output: ModelOutput, sources: list[SourceBlock]) -> Outcome:
         key = (citation.source, _normalise(citation.span))
         if source is None or key in seen or not span_is_in_source(citation.span, source):
             continue
+        if quote_rests_on_injection(citation.span, source.text):
+            continue  # instruction-like text is never evidence, even when quoted exactly
         seen.add(key)
         verified.append(VerifiedCitation(source, citation.span.strip()))
     dropped = len(output.citations) - len(verified)

@@ -15,6 +15,7 @@ from lekha.generation.answer import (
     span_is_in_source,
     verify,
 )
+from lekha.generation.injection import looks_like_injection, quote_rests_on_injection
 from lekha.generation.minutes import (
     MINUTES_SCHEMA,
     MINUTES_SYSTEM_PROMPT,
@@ -54,11 +55,13 @@ __all__ = [
     "VerifiedMinutes",
     "abstain_message",
     "evidence_is_sufficient",
+    "looks_like_injection",
     "minutes_as_text",
     "neutralise",
     "parse_minutes",
     "parse_model_output",
     "quote_in_transcript",
+    "quote_rests_on_injection",
     "render_minutes_prompt",
     "render_user_prompt",
     "span_is_in_source",

@@ -17,6 +17,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from lekha.generation.injection import quote_rests_on_injection
 from lekha.generation.prompt import FENCE_CLOSE, FENCE_OPEN, neutralise
 
 _SPACE = re.compile(r"\s+")
@@ -150,6 +151,8 @@ def _normalise(text: str) -> str:
 
 def quote_in_transcript(quote: str, transcript: str) -> bool:
     wanted = _normalise(quote)
+    if quote_rests_on_injection(quote, transcript):
+        return False  # instruction-like text is never evidence
     return len(wanted) >= MIN_EVIDENCE_CHARS and " " in wanted and wanted in _normalise(transcript)
 
 

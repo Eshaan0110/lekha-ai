@@ -97,6 +97,8 @@ be downloaded; it understands English only, so Kannada search waits for BGE-M3.
 
 ## Phase 4 — Daily-use companion (local, synthetic data only)
 
+**Build work complete; end-of-phase report written ([reports/phase-4-report.md](reports/phase-4-report.md)); awaiting owner go/no-go.** Golden set (120 questions): all quality targets met, 0 permission violations, 1 injection failure found and fixed (instruction-like text is never evidence); speed targets not met on the laptop.
+
 Owner said go ahead (2026-10-21). Plan approved with the recommended D1–D6: [design/phase-4-plan.md](design/phase-4-plan.md). Building.
 
 | Step | Status | Evidence |

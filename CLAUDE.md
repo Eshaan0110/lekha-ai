@@ -602,5 +602,10 @@ all quality and security targets met on the synthetic golden set, p95 latency no
 laptop. Owner said go ahead with Phase 4 (2026-10-21); the Phase 4 plan
 ([`docs/design/phase-4-plan.md`](docs/design/phase-4-plan.md)) is approved with the recommended
 D1–D6 (React + Vite, local model with live progress, file imports, audio and connectors
-deferred, minimal admin). Building the demo web app first. Commit rule: one commit per finished piece of
+deferred, minimal admin). Phase 4 build work is complete: web app, meeting memory
+(ADR-0015), minutes with organiser approval, glossary (ADR-0016), pilot support. The Phase 4
+report is written ([`docs/reports/phase-4-report.md`](docs/reports/phase-4-report.md)):
+120-question golden set met every quality target with 0 permission violations; one injection
+failure was found and fixed; speed targets not met on the laptop. Waiting for the owner's
+go/no-go before planning Phase 5. Commit rule: one commit per finished piece of
 work, push only when the owner says.

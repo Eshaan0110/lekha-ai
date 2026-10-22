@@ -15,6 +15,7 @@ the Phase 3 acceptance evidence, read from the report.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -29,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from apps.api.main import create_app
 from apps.api.ratelimit import RateDecision
+from apps.scripts.demo_corpus import GLOSSARY, MEETINGS, DemoMeeting
 from apps.scripts.seed_dev_data import SeedResult, seed_synthetic_organisation
 from apps.wiring import build_embedder, build_language_model, build_vector_index
 from apps.worker.pipeline import PipelineDeps, run_ingestion
@@ -150,6 +152,27 @@ def _upload(client: TestClient, org: SeedResult, doc: GoldenDoc) -> dict[str, An
     return body
 
 
+def _import_meeting(client: TestClient, org: SeedResult, meeting: DemoMeeting) -> dict[str, Any]:
+    organiser = meeting.organiser
+    unit = "bu-beta" if organiser == "ravi" else "bu-alpha"
+    metadata = {
+        "title": meeting.title,
+        "business_unit_id": str(org.business_units[unit]),
+        "started_at": meeting.started_at,
+        "participant_user_ids": [str(org.users[p]) for p in meeting.participants],
+        "external_id": f"golden:{meeting.key}",
+    }
+    response = client.post(
+        "/api/v1/meetings",
+        headers={"X-Dev-User": f"dev|{organiser}"},
+        files={"file": (meeting.filename, meeting.transcript.encode("utf-8"))},
+        data={"metadata": json.dumps(metadata)},
+    )
+    assert response.status_code == 201, (meeting.key, response.text)
+    body: dict[str, Any] = response.json()
+    return body
+
+
 async def test_golden_set(
     client: TestClient,
     org: SeedResult,
@@ -164,9 +187,30 @@ async def test_golden_set(
             deps, org.organisation_id, uuid.UUID(uploaded["ingestion_job_id"])
         )
         assert status is IngestionStatus.SUCCEEDED, key
+    for meeting in MEETINGS:
+        imported = _import_meeting(client, org, meeting)
+        status = await run_ingestion(
+            deps, org.organisation_id, uuid.UUID(imported["ingestion_job_id"])
+        )
+        assert status is IngestionStatus.SUCCEEDED, meeting.key
+        uploads[f"MT-{meeting.key}"] = imported
+    for unit, curator, shared, canonical, aliases, description in GLOSSARY:
+        added = client.post(
+            "/api/v1/glossary",
+            headers={"X-Dev-User": f"dev|{curator}"},
+            json={
+                "business_unit_id": str(org.business_units[unit]),
+                "canonical": canonical,
+                "aliases": list(aliases),
+                "description": description,
+                "shared": shared,
+            },
+        )
+        assert added.status_code == 201, added.text
     key_by_document = {u["document_id"]: key for key, u in uploads.items()}
 
     results: list[QuestionResult] = []
+    model_errors: list[str] = []
     for question in QUESTIONS:
         headers = {"X-Dev-User": f"dev|{question.asker}"}
         found = client.post(
@@ -174,9 +218,27 @@ async def test_golden_set(
         ).json()["results"]
         started = time.monotonic()
         response = client.post("/api/v1/ask", headers=headers, json={"question": question.question})
+        if response.status_code == 503 and LLM != "fake":
+            # A one-off local model hiccup shouldn't throw away hours of results: retry once,
+            # then record it as an error (counted and reported, scored as an abstention).
+            await asyncio.sleep(10)
+            started = time.monotonic()
+            response = client.post(
+                "/api/v1/ask", headers=headers, json={"question": question.question}
+            )
         latency = time.monotonic() - started
-        assert response.status_code == 200, (question.id, response.text)
-        body = response.json()
+        body: dict[str, Any]
+        if response.status_code == 503 and LLM != "fake":
+            model_errors.append(question.id)
+            body = {
+                "abstained": True,
+                "abstention_reason": "model_error",
+                "answer": "",
+                "citations": [],
+            }
+        else:
+            assert response.status_code == 200, (question.id, response.text)
+            body = response.json()
         result = QuestionResult(
             question=question,
             abstained=body["abstained"],
@@ -196,6 +258,7 @@ async def test_golden_set(
         "language model": model.model_name,
         "retrieval": eval_settings.retrieval_mode,
         "sources per question": str(eval_settings.ask_top_k),
+        "model errors (scored as abstentions)": ", ".join(model_errors) or "none",
         "date": time.strftime("%Y-%m-%d"),
     }
     report = report_markdown(board, results, config)
@@ -209,4 +272,5 @@ async def test_golden_set(
 
     # The hard rule holds for every model: nothing the asker may not read ever reaches them.
     assert board.permission_violations == 0, [r.leaks for r in results if r.leaks]
-    assert board.counts["questions"] == 100
+    assert board.counts["questions"] == len(QUESTIONS)
+    assert len(model_errors) <= len(QUESTIONS) // 20, model_errors  # more means a broken run
