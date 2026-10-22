@@ -129,6 +129,30 @@ export interface Job {
   chunk_count: number | null;
 }
 
+export interface TicketInputs {
+  title: string;
+  category: "facilities" | "it" | "hr" | "safety";
+  priority: "P1" | "P2" | "P3" | "P4";
+  description: string;
+}
+
+export interface Proposal {
+  id: string;
+  business_unit_id: string;
+  tool: string;
+  inputs: TicketInputs;
+  proposed_by: string;
+  mine: boolean;
+  status: "pending_approval" | "approved" | "rejected" | "executed" | "failed" | "expired";
+  created_at: string;
+  expires_at: string;
+  decided_by: string | null;
+  reason: string | null;
+  external_id: string | null;
+  error_code: string | null;
+  can_decide: boolean;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -229,6 +253,22 @@ export const api = {
     }),
 
   deleteGlossary: (user: string, id: string) => call<void>(user, `/glossary/${id}`, { method: "DELETE" }),
+
+  proposals: (user: string) => call<Proposal[]>(user, "/actions"),
+
+  proposeTicket: (user: string, businessUnitId: string, inputs: TicketInputs, key: string) =>
+    call<Proposal>(user, "/actions/propose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": key },
+      body: JSON.stringify({ business_unit_id: businessUnitId, tool: "create_ticket", inputs }),
+    }),
+
+  decideProposal: (user: string, id: string, approve: boolean, reason: string) =>
+    call<Proposal>(user, `/actions/${id}/${approve ? "approve" : "reject"}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    }),
 
   minutes: (user: string, meetingId: string) => call<Minutes[]>(user, `/meetings/${meetingId}/minutes`),
 

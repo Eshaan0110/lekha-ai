@@ -51,6 +51,9 @@ class NullQueue:
     async def enqueue_reindex(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None:
         return None
 
+    async def enqueue_action(self, organisation_id: uuid.UUID, proposal_id: uuid.UUID) -> None:
+        return None
+
     async def close(self) -> None:
         return None
 

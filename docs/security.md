@@ -57,6 +57,7 @@ a recorded manual check proves it.
 | Audit reader | `GET /api/v1/audit` requires `audit_reader`; scoped to activity by people with a role in the reader's unit; shows actions and paths, never question or document text | `test_the_audit_log_is_for_audit_readers_and_scoped_to_their_unit` |
 | Question requests need consent | A question reaches curators only if the asker sends it; curators of other units can't see or close it | `test_an_unanswered_question_can_be_logged_and_followed_up_by_curators` |
 | Instruction-like text is never evidence | Sentences addressed to an AI ("ignore the user's question", "system instruction", "Assistant, …") can't be cited in answers or minutes, even when quoted exactly | `test_injection.py`; golden probe X09 |
+| No autonomous actions (CLAUDE.md §6.3) | Every action is a proposal until a named `approver` of its unit approves it; nobody approves their own proposal; undecided proposals expire after 24 h; inputs validated on proposal and again on edit; execution happens once (idempotency key in the ticketing system, one execution record per proposal); only outages are retried; propose and decide are audited, the execution is recorded with its attempts. Tickets go only to the **simulated** ticketing system | `test_actions.py` (unit and integration) |
 | Interactive API docs off outside local/test | `/docs` and `/openapi.json` disabled in staging/production | `test_interactive_docs_are_disabled_in_production` |
 
 ## Not yet implemented (Phase 1, later slices)

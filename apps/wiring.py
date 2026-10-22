@@ -22,6 +22,7 @@ from model_layer import (
 
 INGEST_FUNCTION = "ingest"
 PURGE_FUNCTION = "purge"
+ACTION_FUNCTION = "execute_action"
 
 
 def build_embedder(settings: Settings) -> Embedder:
@@ -80,6 +81,8 @@ class JobQueue(Protocol):
 
     async def enqueue_reindex(self, organisation_id: uuid.UUID, job_id: uuid.UUID) -> None: ...
 
+    async def enqueue_action(self, organisation_id: uuid.UUID, proposal_id: uuid.UUID) -> None: ...
+
     async def close(self) -> None: ...
 
 
@@ -120,6 +123,18 @@ class ArqJobQueue:
             str(organisation_id),
             str(job_id),
             _job_id=f"reindex:{job_id}:{uuid.uuid4().hex}",
+            _queue_name=queue_name(self._settings),
+        )
+
+    async def enqueue_action(self, organisation_id: uuid.UUID, proposal_id: uuid.UUID) -> None:
+        """Execute an approved proposal. The proposal ID is the queue ID, so a second enqueue
+        is a no-op; the executor's idempotency key guards beyond ARQ's memory."""
+        pool = await self._get_pool()
+        await pool.enqueue_job(
+            ACTION_FUNCTION,
+            str(organisation_id),
+            str(proposal_id),
+            _job_id=f"action:{proposal_id}",
             _queue_name=queue_name(self._settings),
         )
 

@@ -15,6 +15,7 @@ from fastapi import FastAPI
 from redis.asyncio import Redis
 
 from apps.api import (
+    actions,
     ask,
     deletions,
     glossary,
@@ -147,6 +148,7 @@ def create_app(
     app.include_router(meetings.router)
     app.include_router(glossary.router)
     app.include_router(support.router)
+    app.include_router(actions.router)
     return app
 
 

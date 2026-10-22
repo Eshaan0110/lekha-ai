@@ -13,6 +13,8 @@ must allow and a case that must deny.
 | dev|chitra     | curator @ alpha (may upload)       | nothing       |
 | dev|bina       | curator @ beta (may upload)        | nothing       |
 | dev|tara       | audit_reader @ alpha               | nothing; reads Alpha's audit log |
+| dev|hari       | approver @ alpha                   | nothing; approves Alpha's tickets |
+| dev|uma        | approver @ beta                    | nothing; approves Beta's tickets |
 | dev|kiran      | viewer @ alpha, grant EXPIRED      | nothing       |
 | dev|nobody     | none                               | nothing       |
 | dev|inactive   | viewer @ alpha, account inactive   | cannot sign in|
@@ -61,6 +63,7 @@ ROLE_CLEARANCE = {
     "curator": Classification.INTERNAL,
     "admin": Classification.INTERNAL,
     "audit_reader": Classification.INTERNAL,
+    "approver": Classification.INTERNAL,
     "legal": Classification.CONFIDENTIAL,
 }
 
@@ -242,7 +245,18 @@ async def seed_synthetic_organisation(
     sd.add(
         SourceSystem(id=sd.source_id, organisation_id=organisation_id, code="upload", name="Upload")
     )
-    for name in ("asha", "meera", "ravi", "chitra", "bina", "tara", "kiran", "nobody"):
+    for name in (
+        "asha",
+        "meera",
+        "ravi",
+        "chitra",
+        "bina",
+        "tara",
+        "hari",
+        "uma",
+        "kiran",
+        "nobody",
+    ):
         sd.user(name)
     sd.user("inactive", active=False)
     await session.flush()
@@ -255,6 +269,8 @@ async def seed_synthetic_organisation(
     sd.grant("chitra", "curator", "bu-alpha")
     sd.grant("bina", "curator", "bu-beta")
     sd.grant("tara", "audit_reader", "bu-alpha")
+    sd.grant("hari", "approver", "bu-alpha")
+    sd.grant("uma", "approver", "bu-beta")
     sd.grant("inactive", "viewer", "bu-alpha")
     alpha_viewer = sd.role_badge("viewer", "bu-alpha")
     alpha_legal = sd.role_badge("legal", "bu-alpha")

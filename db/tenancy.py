@@ -34,6 +34,10 @@ async def tenant_transaction(
 # Child tables first, so foreign keys are satisfied while deleting. audit_event is absent on
 # purpose: it is append-only and outlives the organisations it mentions.
 TENANT_TABLES_CHILD_FIRST = (
+    "action_execution",
+    "action_approval",
+    "action_proposal",
+    "simulated_ticket",
     "question_request",
     "glossary_name",
     "glossary_entry",

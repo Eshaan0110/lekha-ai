@@ -111,7 +111,12 @@ Owner said go ahead (2026-10-21). Plan approved with the recommended D1–D6: [d
 
 ## Phase 5 — Phone answers and human-approved tickets (local, synthetic data only)
 
-Plan approved 2026-10-22 with the recommended D1–D6 (Hindi back in; fakes first, Sarvam only with owner authorisation; phone simulator; fake ticketing; approver role; ID + one-time code, simulated): [design/phase-5-plan.md](design/phase-5-plan.md). Building step 1 (actions framework).
+Plan approved 2026-10-22 with the recommended D1–D6 (Hindi back in; fakes first, Sarvam only with owner authorisation; phone simulator; fake ticketing; approver role; ID + one-time code, simulated): [design/phase-5-plan.md](design/phase-5-plan.md).
+
+| Step | Status | Evidence | Notes |
+|---|---|---|---|
+| 1. Actions framework | Tested | Migration 0014: `action_proposal`, `action_approval`, `action_execution`, `simulated_ticket`, all with tenant RLS. Pure rules in `lekha/actions` (who proposes, who approves, 24 h expiry; one tool `create_ticket` with strict inputs) and the ticketing interface in `lekha/connectors`. `POST /api/v1/actions/propose` (optional `Idempotency-Key`), `GET /api/v1/actions[/{id}]`, `POST …/approve` (edits validated again) and `…/reject` (reason required). Only an `approver` of the unit decides, never on their own proposal. The worker's `execute_action` creates the ticket once (idempotency key honoured by the ticketing system; a second execution record is refused), retries only outages and records failures. Synthetic approvers `dev|hari` (Alpha) and `dev|uma` (Beta). Web app "Issues" tab: log an issue, approve or reject. `test_actions.py` unit (13) and integration (9); checked live in the web app (Asha proposed, Hari approved, worker created SIM-25E456E4) | Tickets go only to the **simulated** ticketing system; the real HR/IT system is a Phase 0 item. An approval whose queue hand-off fails stays "approved" (logged); there is no re-queue button yet |
+| 2. Voice session core | Not started | | |
 
 ## Phases 6–7
 

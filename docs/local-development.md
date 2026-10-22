@@ -87,6 +87,8 @@ curl -H "X-Dev-User: dev|asha" http://127.0.0.1:8000/api/v1/documents
 | `dev|chitra` | nothing yet, but may **upload** to alpha (curator) |
 | `dev|bina` | nothing yet, but may **upload** to beta (curator) |
 | `dev|tara` | no documents; reads Alpha's **audit log** (audit_reader) |
+| `dev|hari` | no documents; **approves** Alpha's ticket proposals (approver) |
+| `dev|uma` | no documents; **approves** Beta's ticket proposals (approver) |
 | `dev|kiran`, `dev|nobody` | nothing |
 | `dev|inactive` | cannot sign in (401) |
 

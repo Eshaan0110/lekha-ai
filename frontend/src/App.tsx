@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ActionsPage } from "./components/ActionsPage";
 import { AskPage } from "./components/AskPage";
 import { DocumentsPage } from "./components/DocumentsPage";
 import { GlossaryPage } from "./components/GlossaryPage";
@@ -7,7 +8,7 @@ import { SignIn } from "./components/SignIn";
 import { AuditPage, RequestsPage } from "./components/SupportPages";
 import { PERSONAS } from "./personas";
 
-type Tab = "ask" | "documents" | "meetings" | "glossary" | "requests" | "audit";
+type Tab = "ask" | "documents" | "meetings" | "glossary" | "requests" | "issues" | "audit";
 
 function remembered(): string | null {
   try {
@@ -62,6 +63,9 @@ export function App() {
           <button className={tab === "requests" ? "tab active" : "tab"} onClick={() => setTab("requests")}>
             Requests
           </button>
+          <button className={tab === "issues" ? "tab active" : "tab"} onClick={() => setTab("issues")}>
+            Issues
+          </button>
           {user === "tara" && (
             <button className={tab === "audit" ? "tab active" : "tab"} onClick={() => setTab("audit")}>
               Audit
@@ -83,6 +87,7 @@ export function App() {
         {tab === "meetings" && <MeetingsPage key={user} user={user} />}
         {tab === "glossary" && <GlossaryPage key={user} user={user} />}
         {tab === "requests" && <RequestsPage key={user} user={user} />}
+        {tab === "issues" && <ActionsPage key={user} user={user} />}
         {tab === "audit" && <AuditPage key={user} user={user} />}
       </main>
     </div>

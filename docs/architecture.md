@@ -48,6 +48,9 @@ model_layer/         Language-model interface (Ollama local, Bedrock); embedder 
 apps/api/idempotency.py, db/idempotency.py  Idempotency-Key: claim, replay, complete, release
 apps/api/routes_v1.py  /api/v1/me, /api/v1/documents (cursor paging), /api/v1/documents/{id}
 frontend/            React + TypeScript web app (Vite dev server proxies /api to the API)
+lekha/actions/       Action rules (propose, approve, expiry) and the create_ticket tool spec (pure)
+lekha/connectors/    Interfaces to outside systems (ticketing); pure
+apps/api/actions.py, db/actions.py, apps/worker/actions.py  Proposals, approvals, execute-once; SIMULATED ticketing system
 apps/scripts/demo_corpus.py, load_demo.py  Synthetic demo corpus and its loader (through the API)
 tests/unit/          Fast tests, no Docker required
 tests/integration/   Tests against the real local Docker stack
@@ -55,9 +58,8 @@ infra/local/         Docker Compose for the local stack
 dev.ps1              Repeatable developer commands
 ```
 
-Not yet created (by design — created when their phase starts): `apps/worker`,
-`lekha/{memory,ingestion,retrieval,generation,speech,actions,connectors,mcp,audit}`,
-`model_layer/`, `frontend/`.
+Not yet created (by design — created when their phase starts): `lekha/speech` (Phase 5
+step 3) and `lekha/mcp` (Phase 6).
 
 ### Deviations from the planned structure (CLAUDE.md §4.3)
 
@@ -80,7 +82,7 @@ flowchart LR
 
 - `lekha` and `db` must never import `apps` (entry points depend on business code, never the reverse).
 - `lekha.core` must not import `db` (configuration and logging stay free of ORM concerns).
-- `lekha.auth` must not import `db`, `apps`, SQLAlchemy, FastAPI, or any network client: permission rules stay pure and unit-testable.
+- `lekha.auth`, `lekha.audit`, `lekha.actions` and `lekha.connectors` must not import `db`, `apps`, SQLAlchemy, FastAPI, or any network client: permission and action rules stay pure and unit-testable.
 - `model_layer` must not import `lekha` (contract added when `model_layer` is created).
 
 ## Request flow (today)
@@ -139,6 +141,9 @@ request ID, and turned into a generic `500 internal_error` envelope.
 | `POST /api/v1/glossary`, `PATCH`/`DELETE /api/v1/glossary/{id}` | Manage a unit's glossary | Curators of that unit |
 | `POST /api/v1/answers/{query_id}/request` | Send an unanswered question to your unit's curators (asker only) | Signed in |
 | `GET /api/v1/requests`, `POST /api/v1/requests/{id}/resolve` | Requests in units you curate (plus your own); resolve or dismiss | Curators of the unit |
+| `POST /api/v1/actions/propose` | Propose an action (only `create_ticket`); nothing runs until approved; optional `Idempotency-Key` | Anyone with a role in the unit |
+| `GET /api/v1/actions`, `GET /api/v1/actions/{id}` | Proposals in units you approve for, plus your own | Signed in |
+| `POST /api/v1/actions/{id}/approve`, `…/reject` | Decide (approve with optional edits, re-validated; reject with a reason); the worker then creates the ticket once | `approver` of the unit, never the proposer |
 | `GET /api/v1/audit?limit=&cursor=` | Audit trail of activity by people in your audit units | `audit_reader` |
 | `GET /api/v1/ingestion-jobs/{id}` | Processing status of an upload | Curator of the unit, or a reader of the document |
 | `POST /api/v1/documents` | Upload a PDF/DOCX (multipart `file` + `metadata` JSON); an existing `canonical_key` adds a new version; optional `Idempotency-Key` header for safe retries | Curator in the business unit |

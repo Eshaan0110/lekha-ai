@@ -117,7 +117,7 @@ forbidden_modules = ["db"]
 [[tool.importlinter.contracts]]
 name = "Permission and audit domain stay free of frameworks and persistence (CLAUDE.md 4.2)"
 type = "forbidden"
-source_modules = ["lekha.auth", "lekha.audit"]
+source_modules = ["lekha.auth", "lekha.audit", "lekha.actions", "lekha.connectors"]
 forbidden_modules = ["db", "apps", "sqlalchemy", "fastapi", "starlette", "asyncpg", "redis", "httpx"]
 
 [[tool.importlinter.contracts]]

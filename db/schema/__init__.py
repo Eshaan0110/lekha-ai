@@ -1,5 +1,6 @@
 """SQLAlchemy ORM mappings. The only package that defines persistence mappings."""
 
+from db.schema.actions import ActionApproval, ActionExecution, ActionProposal, SimulatedTicket
 from db.schema.answers import AnswerFeedback, AnswerLog, Citation, QueryLog
 from db.schema.audit import AuditEventRecord
 from db.schema.deletion import DeletionRequest, DeletionStatus
@@ -25,6 +26,9 @@ from db.schema.meetings import Meeting, MeetingMinutes, MeetingParticipant, Minu
 from db.schema.support import QuestionRequest, RequestStatus
 
 __all__ = [
+    "ActionApproval",
+    "ActionExecution",
+    "ActionProposal",
     "AnswerFeedback",
     "AnswerLog",
     "AppUser",
@@ -54,6 +58,7 @@ __all__ = [
     "QuestionRequest",
     "RequestStatus",
     "Role",
+    "SimulatedTicket",
     "SourceSystem",
     "UserRoleGrant",
 ]
