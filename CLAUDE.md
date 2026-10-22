@@ -610,7 +610,9 @@ failure was found and fixed; speed targets not met on the laptop. Waiting for th
 go/no-go before planning Phase 5.
 
 **Phase 5 (2026-10-22):** owner GO to *plan* Phase 5 only ("don't build yet"). The plan
-([`docs/design/phase-5-plan.md`](docs/design/phase-5-plan.md)) is proposed for discussion with
-decisions D1–D6; nothing may be built until they are decided. Paid speech or telephony needs
+([`docs/design/phase-5-plan.md`](docs/design/phase-5-plan.md)) is approved (2026-10-22) with the
+recommended D1–D6: **Hindi is back in scope**; speech uses fakes first, Sarvam only with the
+owner's authorisation; phone simulator; fake ticketing system; `approver` role; employee ID +
+one-time code, simulated. Paid speech or telephony needs
 the owner's explicit authorisation (§13). Commit rule: one commit per finished piece of
 work, push only when the owner says.

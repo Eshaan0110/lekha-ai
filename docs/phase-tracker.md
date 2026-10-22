@@ -111,7 +111,7 @@ Owner said go ahead (2026-10-21). Plan approved with the recommended D1–D6: [d
 
 ## Phase 5 — Phone answers and human-approved tickets (local, synthetic data only)
 
-Owner: GO to *plan* Phase 5, don't build (2026-10-22). Plan proposed for discussion: [design/phase-5-plan.md](design/phase-5-plan.md), decisions D1–D6 pending (Hindi back in, speech provider, telephony simulator, fake ticketing, approver role, caller verification). Nothing built.
+Plan approved 2026-10-22 with the recommended D1–D6 (Hindi back in; fakes first, Sarvam only with owner authorisation; phone simulator; fake ticketing; approver role; ID + one-time code, simulated): [design/phase-5-plan.md](design/phase-5-plan.md). Building step 1 (actions framework).
 
 ## Phases 6–7
 

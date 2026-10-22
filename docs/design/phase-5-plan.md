@@ -1,7 +1,8 @@
 # Phase 5 plan: phone answers and human-approved tickets (for discussion)
 
-- **Status:** Proposed **for discussion**. Owner: "GO to plan Phase 5 … don't build yet"
-  (2026-10-22). Nothing will be built until the decisions below are made.
+- **Status:** Approved by the owner on 2026-10-22 with the recommended D1–D6: Hindi back in;
+  fakes first, Sarvam later only with the owner's authorisation; phone simulator; fake
+  ticketing; approver role; ID + one-time code, simulated.
 - **Date:** 2026-10-22
 - **Scope:** local, **synthetic data only**.
 - **Sources:**
