@@ -109,7 +109,11 @@ Owner said go ahead (2026-10-21). Plan approved with the recommended D1–D6: [d
 | 4. Glossary | Tested | ADR-0016 (Accepted 2026-10-22). Migration 0012; `GET/POST /api/v1/glossary`, `PATCH/DELETE /api/v1/glossary/{id}` (curators of the unit; shared entries visible org-wide); whole-word matching incl. Kannada; question expansion + a glossary-names keyword list in rank fusion; model told which names are equivalent; `test_glossary.py` (unit 6, integration 3); live: K12 casual leave and K52 medical check-up (both missed in the Phase 3 eval) now answered from the Kannada sources |
 | 5. Pilot support | Tested | Migration 0013. Unanswered questions logged as requests only when the asker chooses (`POST /api/v1/answers/{id}/request`), followed up by the unit's curators (`GET /api/v1/requests`, `POST /api/v1/requests/{id}/resolve`; non-curators get 404). Audit reader `GET /api/v1/audit` (owed since Phase 1): `audit_reader` only, scoped to activity by people with a role in the reader's unit, cursor-paginated; synthetic auditor `dev|tara`. One-page [user guide](user-guide.md). Fixed: search before anything was indexed returned 500. `test_support.py` (3) | The real 20-user pilot stays blocked on Phase 0.
 
-## Phases 5–7
+## Phase 5 — Phone answers and human-approved tickets (local, synthetic data only)
+
+Owner: GO to *plan* Phase 5, don't build (2026-10-22). Plan proposed for discussion: [design/phase-5-plan.md](design/phase-5-plan.md), decisions D1–D6 pending (Hindi back in, speech provider, telephony simulator, fake ticketing, approver role, caller verification). Nothing built.
+
+## Phases 6–7
 
 
 Not started. Must not begin before Phase 1 acceptance and explicit owner approval.

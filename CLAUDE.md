@@ -607,5 +607,10 @@ deferred, minimal admin). Phase 4 build work is complete: web app, meeting memor
 report is written ([`docs/reports/phase-4-report.md`](docs/reports/phase-4-report.md)):
 120-question golden set met every quality target with 0 permission violations; one injection
 failure was found and fixed; speed targets not met on the laptop. Waiting for the owner's
-go/no-go before planning Phase 5. Commit rule: one commit per finished piece of
+go/no-go before planning Phase 5.
+
+**Phase 5 (2026-10-22):** owner GO to *plan* Phase 5 only ("don't build yet"). The plan
+([`docs/design/phase-5-plan.md`](docs/design/phase-5-plan.md)) is proposed for discussion with
+decisions D1–D6; nothing may be built until they are decided. Paid speech or telephony needs
+the owner's explicit authorisation (§13). Commit rule: one commit per finished piece of
 work, push only when the owner says.
