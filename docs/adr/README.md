@@ -22,6 +22,6 @@ and when we would revisit it. Statuses: **Proposed** (awaiting owner approval),
 | [0014](0014-hybrid-retrieval.md) | Hybrid retrieval (meaning + keywords) with reciprocal rank fusion | Accepted (2026-10-21) |
 | [0015](0015-meeting-memory.md) | Meeting memory stored as documents, readable only by participants | Accepted (2026-10-21) |
 | [0016](0016-glossary-query-expansion.md) | Glossary applied by expanding questions, not by relinking documents | Accepted (2026-10-22) |
-| [0017](0017-phone-caller-verification.md) | Phone callers are verified by HR number and a one-time code; the line is simulated | Proposed (2026-10-22) |
+| [0017](0017-phone-caller-verification.md) | Phone callers are verified by HR number and a one-time code; the line is simulated | Accepted (2026-10-23) |
 
 Template: copy any ADR and keep every heading.

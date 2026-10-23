@@ -1,6 +1,6 @@
 # ADR-0017: Phone callers are verified by HR number and a one-time code; the line is simulated
 
-- **Status:** Proposed (2026-10-22), awaiting the owner's decision
+- **Status:** Accepted by the owner on 2026-10-23
 - **Date:** 2026-10-22
 
 ## Context
