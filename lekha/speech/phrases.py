@@ -30,6 +30,7 @@ class Phrase(StrEnum):
     HANDOVER = "handover"
     GOODBYE = "goodbye"
     TOO_MANY = "too_many"
+    NOT_HEARD = "not_heard"
 
 
 _PHRASES: dict[str, dict[Phrase, str]] = {
@@ -57,6 +58,7 @@ _PHRASES: dict[str, dict[Phrase, str]] = {
         Phrase.HANDOVER: "I am connecting you to a person. Please hold.",
         Phrase.GOODBYE: "Thank you. Goodbye.",
         Phrase.TOO_MANY: "That's a lot of questions at once. Please ask again in a minute.",
+        Phrase.NOT_HEARD: "Sorry, I didn't hear anything. Please say that again.",
     },
     "kn": {
         Phrase.CONSENT: "ನಮಸ್ಕಾರ, ಇದು ಲೇಖಾ. ಈ ಕರೆಯನ್ನು ಸ್ವಯಂಚಾಲಿತ ವ್ಯವಸ್ಥೆ ನಿರ್ವಹಿಸುತ್ತದೆ ಮತ್ತು "
@@ -81,6 +83,7 @@ _PHRASES: dict[str, dict[Phrase, str]] = {
         Phrase.HANDOVER: "ನಿಮ್ಮನ್ನು ಒಬ್ಬ ವ್ಯಕ್ತಿಗೆ ಸಂಪರ್ಕಿಸುತ್ತಿದ್ದೇನೆ. ದಯವಿಟ್ಟು ಕಾಯಿರಿ.",
         Phrase.GOODBYE: "ಧನ್ಯವಾದಗಳು. ನಮಸ್ಕಾರ.",
         Phrase.TOO_MANY: "ಒಂದೇ ಬಾರಿಗೆ ತುಂಬಾ ಪ್ರಶ್ನೆಗಳು. ದಯವಿಟ್ಟು ಒಂದು ನಿಮಿಷದ ನಂತರ ಮತ್ತೆ ಕೇಳಿ.",
+        Phrase.NOT_HEARD: "ಕ್ಷಮಿಸಿ, ಏನೂ ಕೇಳಿಸಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೊಮ್ಮೆ ಹೇಳಿ.",
     },
     "hi": {
         Phrase.CONSENT: "नमस्ते, यह लेखा है। यह कॉल एक स्वचालित सिस्टम संभालता है और इसका "
@@ -105,6 +108,7 @@ _PHRASES: dict[str, dict[Phrase, str]] = {
         Phrase.HANDOVER: "आपको एक व्यक्ति से जोड़ा जा रहा है। कृपया प्रतीक्षा कीजिए।",
         Phrase.GOODBYE: "धन्यवाद। नमस्ते।",
         Phrase.TOO_MANY: "एक साथ बहुत सारे सवाल हो गए। कृपया एक मिनट बाद फिर पूछिए।",
+        Phrase.NOT_HEARD: "माफ़ कीजिए, कुछ सुनाई नहीं दिया। कृपया फिर से कहिए।",
     },
 }
 

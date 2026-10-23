@@ -7,7 +7,9 @@ number is never trusted). They exist only in development sign-in mode (local/tes
 provider adapter must verify the provider's signed requests before it replaces them.
 
 - POST /api/v1/voice/calls: a call arrives; Lekha plays the consent notice.
-- POST /api/v1/voice/calls/{id}/say: one thing the caller says; Lekha's replies.
+- POST /api/v1/voice/calls/{id}/say: one thing the caller says, as text; Lekha's replies.
+- POST /api/v1/voice/calls/{id}/speak: the same as audio, through speech-to-text, with the
+  replies back through text-to-speech (the labelled fakes until a provider is authorised).
 - POST /api/v1/voice/calls/{id}/hangup
 - GET  /api/v1/voice/calls/{id}: the written transcript.
 - GET  /api/v1/voice/outbox, /api/v1/voice/escalations: the simulated SMS outbox and
@@ -21,6 +23,8 @@ approval flow. The call row is locked for each step, so steps of one call never 
 
 from __future__ import annotations
 
+import base64
+import binascii
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -33,8 +37,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.ask import answer_question
+from apps.wiring import Speech
 from db.access import load_auth_context
 from db.actions import add_proposal
+from db.glossary import visible_entries
 from db.schema import VoiceCall
 from db.tenancy import tenant_transaction
 from db.voice import (
@@ -63,6 +69,7 @@ from lekha.speech import (
     CALL_IDLE_LIMIT,
     CODE_LIFETIME,
     CONSENT_ORDER,
+    LANGUAGES,
     MAX_CALL_LENGTH,
     MAX_CODE_ATTEMPTS,
     MAX_CODES_PER_EMPLOYEE_PER_HOUR,
@@ -74,6 +81,7 @@ from lekha.speech import (
     Intent,
     Phrase,
     classify,
+    correct_names,
     draft_ticket,
     mask_digits,
     parse_code,
@@ -83,7 +91,7 @@ from lekha.speech import (
     spoken_answer,
     ticket_status,
 )
-from model_layer import LanguageModelError
+from model_layer import MAX_AUDIO_BYTES, LanguageModelError, SpeechError, UnsupportedAudioError
 
 logger = structlog.get_logger("lekha.voice")
 
@@ -120,6 +128,24 @@ class CallOut(BaseModel):
     state: CallState
     language: str | None
     replies: list[str]
+
+
+class SpeakIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    media_type: str = Field(max_length=100)
+    # Base64 grows data by a third; the decoded size is checked against MAX_AUDIO_BYTES.
+    audio_base64: str = Field(min_length=1, max_length=MAX_AUDIO_BYTES * 4 // 3 + 4)
+
+
+class AudioOut(BaseModel):
+    media_type: str
+    audio_base64: str
+
+
+class SpeakOut(CallOut):
+    heard: str = Field(description="What speech-to-text heard")
+    reply_audio: list[AudioOut] = Field(description="Each reply as speech, in order")
 
 
 class TurnOut(BaseModel):
@@ -184,30 +210,49 @@ class _Step:
     responses={409: {"description": "The call has ended"}},
 )
 async def caller_says(request: Request, call_id: uuid.UUID, body: SayIn, org: PhoneOrg) -> CallOut:
+    """Typed text, as if already transcribed."""
     _target(request, call_id)
-    now = datetime.now(UTC)
-    timed_out = False
-    async with tenant_transaction(request.app.state.session_factory, org) as s:
-        call = await _open_call(s, call_id)
-        if now - call.last_activity_at > CALL_IDLE_LIMIT or now - call.created_at > MAX_CALL_LENGTH:
-            end_call(call, CallState.ENDED, "timeout", now)
-            timed_out = True
-        else:
-            if call.language is None:
-                detected = detect_language(body.text)
-                if detected is not Language.UNKNOWN:
-                    call.language = detected.value
-            heard = mask_digits(body.text) if call.state is CallState.AWAITING_CODE else body.text
-            await add_turns(s, call, [("caller", heard)])
-            call.last_activity_at = now
-            step = await _step(s, call, body.text, now)
-            await add_turns(s, call, [("lekha", r) for r in step.replies])
-            out = _out(call, step.replies)
-    if timed_out:
-        raise HTTPException(status_code=409, detail="This call has ended.")
-    if step.question is None:
-        return out
-    return await _answer(request, org, call_id, step.question)
+    return await _hear(request, org, call_id, body.text, spoken_language=None)
+
+
+@router.post(
+    "/calls/{call_id}/speak",
+    response_model=SpeakOut,
+    responses={
+        409: {"description": "The call has ended"},
+        413: {"description": "Audio too long"},
+        415: {"description": "Audio format not accepted by the speech service"},
+        503: {"description": "No speech service configured"},
+    },
+)
+async def caller_speaks(
+    request: Request, call_id: uuid.UUID, body: SpeakIn, org: PhoneOrg
+) -> SpeakOut:
+    """Audio through speech-to-text, and Lekha's replies back through text-to-speech."""
+    _target(request, call_id)
+    speech: Speech | None = request.app.state.speech
+    if speech is None:
+        raise HTTPException(status_code=503, detail="No speech service is configured.")
+    try:
+        audio = base64.b64decode(body.audio_base64, validate=True)
+    except binascii.Error:
+        raise HTTPException(status_code=422, detail="audio_base64 is not valid base64.") from None
+    if len(audio) > MAX_AUDIO_BYTES:
+        raise HTTPException(status_code=413, detail="The audio is too long.")
+    hint = await _call_language(request, org, call_id)
+    try:
+        heard = await speech.stt.transcribe(audio, body.media_type, language_hint=hint)
+    except UnsupportedAudioError:
+        raise HTTPException(status_code=415, detail="Audio format not accepted.") from None
+    except SpeechError:
+        logger.warning("speech_to_text_failed", model=speech.stt.model_name)
+        out = await _fail_call(request, org, call_id)
+        return await _with_audio(speech, out, heard="")
+    if not heard.text.strip():
+        out = await _repeat_request(request, org, call_id)
+        return await _with_audio(speech, out, heard="")
+    out = await _hear(request, org, call_id, heard.text, spoken_language=heard.language)
+    return await _with_audio(speech, out, heard=heard.text)
 
 
 @router.post(
@@ -257,6 +302,107 @@ async def read_escalations(request: Request, org: PhoneOrg) -> list[EscalationOu
 
 
 # --- one step of the conversation ---------------------------------------------------
+
+
+async def _hear(
+    request: Request,
+    org: uuid.UUID,
+    call_id: uuid.UUID,
+    text: str,
+    *,
+    spoken_language: str | None,
+) -> CallOut:
+    """One thing the caller said (typed, or transcribed from audio)."""
+    now = datetime.now(UTC)
+    timed_out = False
+    async with tenant_transaction(request.app.state.session_factory, org) as s:
+        call = await _open_call(s, call_id)
+        if now - call.last_activity_at > CALL_IDLE_LIMIT or now - call.created_at > MAX_CALL_LENGTH:
+            end_call(call, CallState.ENDED, "timeout", now)
+            timed_out = True
+        else:
+            if call.language is None:
+                call.language = _first_language(text, spoken_language)
+            heard = mask_digits(text) if call.state is CallState.AWAITING_CODE else text
+            await add_turns(s, call, [("caller", heard)])
+            call.last_activity_at = now
+            meant = await _correct_names(s, call, text)
+            step = await _step(s, call, meant, now)
+            await add_turns(s, call, [("lekha", r) for r in step.replies])
+            out = _out(call, step.replies)
+    if timed_out:
+        raise HTTPException(status_code=409, detail="This call has ended.")
+    if step.question is None:
+        return out
+    return await _answer(request, org, call_id, step.question)
+
+
+def _first_language(text: str, spoken_language: str | None) -> str | None:
+    """The call's language, from its first sentence (plan): the speech service's view when
+    it gives one we support, else the script the words are written in."""
+    if spoken_language in LANGUAGES:
+        return spoken_language
+    detected = detect_language(text)
+    return None if detected is Language.UNKNOWN else detected.value
+
+
+async def _correct_names(s: AsyncSession, call: VoiceCall, text: str) -> str:
+    """Once verified, near-misses of glossary names the caller may see are corrected (the
+    transcript keeps what was heard). Before verification nothing is looked up."""
+    if call.verified_user_id is None or call.state is CallState.AWAITING_CODE:
+        return text
+    ctx = await _caller_context(s, call)
+    if ctx is None:
+        return text
+    names = [name for stored in await visible_entries(s, ctx) for name in stored.entry.names]
+    meant, corrections = correct_names(text, names)
+    if corrections:
+        logger.info("names_corrected", call_id=str(call.id), count=len(corrections))
+    return meant
+
+
+async def _call_language(request: Request, org: uuid.UUID, call_id: uuid.UUID) -> str | None:
+    async with tenant_transaction(request.app.state.session_factory, org) as s:
+        call = await _open_call(s, call_id)
+        return call.language
+
+
+async def _fail_call(request: Request, org: uuid.UUID, call_id: uuid.UUID) -> CallOut:
+    """The speech service failed: hand the call to a person."""
+    async with tenant_transaction(request.app.state.session_factory, org) as s:
+        call = await _open_call(s, call_id)
+        step = await _hand_over(s, call, EscalationReason.SYSTEM_FAILURE, datetime.now(UTC))
+        await add_turns(s, call, [("lekha", r) for r in step.replies])
+        return _out(call, step.replies)
+
+
+async def _repeat_request(request: Request, org: uuid.UUID, call_id: uuid.UUID) -> CallOut:
+    """Nothing was heard: ask again (silence never moves the call on)."""
+    async with tenant_transaction(request.app.state.session_factory, org) as s:
+        call = await _open_call(s, call_id)
+        call.last_activity_at = datetime.now(UTC)
+        replies = [say(Phrase.NOT_HEARD, _lang(call))]
+        await add_turns(s, call, [("lekha", r) for r in replies])
+        return _out(call, replies)
+
+
+async def _with_audio(speech: Speech, out: CallOut, *, heard: str) -> SpeakOut:
+    """Lekha's replies as speech. A text-to-speech failure leaves the audio out (and is
+    logged); a real line would then hand the call over, which needs telephony (Phase 0)."""
+    audio: list[AudioOut] = []
+    try:
+        for reply in out.replies:
+            spoken = await speech.tts.synthesize(reply, out.language or "en")
+            audio.append(
+                AudioOut(
+                    media_type=spoken.media_type,
+                    audio_base64=base64.b64encode(spoken.data).decode("ascii"),
+                )
+            )
+    except SpeechError:
+        logger.warning("text_to_speech_failed", model=speech.tts.model_name)
+        audio = []
+    return SpeakOut(**out.model_dump(), heard=heard, reply_audio=audio)
 
 
 async def _open_call(s: AsyncSession, call_id: uuid.UUID) -> VoiceCall:

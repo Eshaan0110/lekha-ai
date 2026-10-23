@@ -4,7 +4,8 @@ text-to-speech interfaces join in step 3; until then typed text stands in for sp
 Public interface: other modules import from ``lekha.speech`` only.
 """
 
-from lekha.speech.phrases import CONSENT_ORDER, Phrase, readback, say, ticket_status
+from lekha.speech.names import Correction, correct_names
+from lekha.speech.phrases import CONSENT_ORDER, LANGUAGES, Phrase, readback, say, ticket_status
 from lekha.speech.session import (
     CALL_IDLE_LIMIT,
     CODE_DIGITS,
@@ -31,6 +32,7 @@ __all__ = [
     "CODE_DIGITS",
     "CODE_LIFETIME",
     "CONSENT_ORDER",
+    "LANGUAGES",
     "MAX_CALL_LENGTH",
     "MAX_CODES_PER_EMPLOYEE_PER_HOUR",
     "MAX_CODE_ATTEMPTS",
@@ -38,10 +40,12 @@ __all__ = [
     "MAX_UTTERANCE",
     "OPEN_STATES",
     "CallState",
+    "Correction",
     "EscalationReason",
     "Intent",
     "Phrase",
     "classify",
+    "correct_names",
     "draft_ticket",
     "mask_digits",
     "parse_code",

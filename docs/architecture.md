@@ -44,14 +44,14 @@ apps/api/deletions.py  POST/GET /api/v1/deletion-requests
 db/deletion.py       Deletion requests, soft delete, purge bookkeeping
 lekha/ingestion/     Text extraction, language by script, heading-aware chunking (pure)
 lekha/retrieval/     Permission filter from AuthContext; Qdrant adapter with the unscoped-search guard
-model_layer/         Language-model interface (Ollama local, Bedrock); embedder interface; fake embedder (simulation); all-MiniLM-L6-v2 (real, English, numpy); BGE-M3 (ONNX Runtime)
+model_layer/         Speech-to-text and text-to-speech interfaces (fakes only, until a provider is authorised); language-model interface (Ollama local, Bedrock); embedder interface; fake embedder (simulation); all-MiniLM-L6-v2 (real, English, numpy); BGE-M3 (ONNX Runtime)
 apps/api/idempotency.py, db/idempotency.py  Idempotency-Key: claim, replay, complete, release
 apps/api/routes_v1.py  /api/v1/me, /api/v1/documents (cursor paging), /api/v1/documents/{id}
 frontend/            React + TypeScript web app (Vite dev server proxies /api to the API)
 lekha/actions/       Action rules (propose, approve, expiry) and the create_ticket tool spec (pure)
 lekha/connectors/    Interfaces to outside systems (ticketing); pure
 apps/api/actions.py, db/actions.py, apps/worker/actions.py  Proposals, approvals, execute-once; SIMULATED ticketing system
-lekha/speech/        Phone call rules (states, limits, intents, ticket drafts, spoken answers) and phrases in kn/hi/en (pure)
+lekha/speech/        Phone call rules (states, limits, intents, ticket drafts, spoken answers), glossary name correction, and phrases in kn/hi/en (pure)
 apps/api/voice.py, db/voice.py  Simulated phone line: verification, ask, log, hand-over; SMS outbox (never sent)
 apps/scripts/demo_corpus.py, load_demo.py  Synthetic demo corpus and its loader (through the API)
 tests/unit/          Fast tests, no Docker required
@@ -146,6 +146,7 @@ request ID, and turned into a generic `500 internal_error` envelope.
 | `GET /api/v1/actions`, `GET /api/v1/actions/{id}` | Proposals in units you approve for, plus your own | Signed in |
 | `POST /api/v1/actions/{id}/approve`, `…/reject` | Decide (approve with optional edits, re-validated; reject with a reason); the worker then creates the ticket once | `approver` of the unit, never the proposer |
 | `POST /api/v1/voice/calls`, `POST …/{id}/say`, `POST …/{id}/hangup`, `GET …/{id}` | SIMULATED phone line (stands in for the telephony webhook): consent, HR number + one-time code, then ask / log / status, or hand-over | None (anonymous until verified); exists only with development sign-in (local/test) |
+| `POST /api/v1/voice/calls/{id}/speak` | The same as `…/say`, as audio: speech-to-text in, text-to-speech replies out (labelled fakes locally) | Development sign-in only |
 | `GET /api/v1/voice/outbox`, `GET /api/v1/voice/escalations` | Simulated SMS outbox (never sent) and human hand-over queue | Development sign-in only |
 | `GET /api/v1/audit?limit=&cursor=` | Audit trail of activity by people in your audit units | `audit_reader` |
 | `GET /api/v1/ingestion-jobs/{id}` | Processing status of an upload | Curator of the unit, or a reader of the document |

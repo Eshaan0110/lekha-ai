@@ -4,11 +4,12 @@ import { AskPage } from "./components/AskPage";
 import { DocumentsPage } from "./components/DocumentsPage";
 import { GlossaryPage } from "./components/GlossaryPage";
 import { MeetingsPage } from "./components/MeetingsPage";
+import { PhonePage } from "./components/PhonePage";
 import { SignIn } from "./components/SignIn";
 import { AuditPage, RequestsPage } from "./components/SupportPages";
 import { PERSONAS } from "./personas";
 
-type Tab = "ask" | "documents" | "meetings" | "glossary" | "requests" | "issues" | "audit";
+type Tab = "ask" | "documents" | "meetings" | "glossary" | "requests" | "issues" | "phone" | "audit";
 
 function remembered(): string | null {
   try {
@@ -66,6 +67,9 @@ export function App() {
           <button className={tab === "issues" ? "tab active" : "tab"} onClick={() => setTab("issues")}>
             Issues
           </button>
+          <button className={tab === "phone" ? "tab active" : "tab"} onClick={() => setTab("phone")}>
+            Phone
+          </button>
           {user === "tara" && (
             <button className={tab === "audit" ? "tab active" : "tab"} onClick={() => setTab("audit")}>
               Audit
@@ -88,6 +92,7 @@ export function App() {
         {tab === "glossary" && <GlossaryPage key={user} user={user} />}
         {tab === "requests" && <RequestsPage key={user} user={user} />}
         {tab === "issues" && <ActionsPage key={user} user={user} />}
+        {tab === "phone" && <PhonePage key={user} user={user} />}
         {tab === "audit" && <AuditPage key={user} user={user} />}
       </main>
     </div>

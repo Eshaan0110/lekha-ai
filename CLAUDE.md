@@ -614,6 +614,7 @@ go/no-go before planning Phase 5.
 recommended D1–D6: **Hindi is back in scope**; speech uses fakes first, Sarvam only with the
 owner's authorisation; phone simulator; fake ticketing system; `approver` role; employee ID +
 one-time code, simulated. Build progress: step 1 (actions: proposals, named approvers, execute-once against a simulated ticketing system) done and pushed; step 2 (voice session core through a phone simulator; ADR-0017 accepted 2026-10-23) built, tested and pushed;
-step 3 (speech interfaces, phone simulator page) in progress. Paid speech or telephony needs
+step 3 (speech interfaces with labelled fakes, glossary name correction, phone simulator
+page) built and tested. Step 4 (a real speech provider) needs the owner's authorisation. Paid speech or telephony needs
 the owner's explicit authorisation (§13). Commit rule: one commit per finished piece of
 work, push only when the owner says.

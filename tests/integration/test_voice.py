@@ -4,6 +4,7 @@ human approval, and hand-over to a person."""
 
 from __future__ import annotations
 
+import base64
 import re
 import uuid
 from collections.abc import AsyncIterator, Iterator
@@ -18,10 +19,12 @@ import apps.api.voice
 from apps.api.ask import AskResponse, CitationOut
 from apps.api.main import create_app
 from apps.scripts.seed_dev_data import SeedResult, seed_synthetic_organisation, synthetic_contact
+from apps.wiring import Speech
 from apps.worker.actions import ActionDeps, run_action
 from db.actions import SimulatedTicketing
 from lekha.auth import AuthContext
 from lekha.core.config import AuthMode, Settings
+from model_layer import FAKE_AUDIO_TYPE, FakeTextToSpeech, SpeechError, Transcript
 from tests.fixtures.fake_llm import FakeLanguageModel
 from tests.integration.support import delete_tenant
 
@@ -380,3 +383,115 @@ def test_the_simulator_exists_only_with_development_sign_in(
     with TestClient(create_app(production_like, job_queue=NullQueue())) as client:
         assert client.post("/api/v1/voice/calls", json={"caller_number": "+911"}).status_code == 404
         assert client.get("/api/v1/voice/outbox").status_code == 404
+
+
+# --- audio through the speech interfaces (the labelled fakes) ------------------------
+
+
+def _speak(call: Call, words: str, media_type: str = FAKE_AUDIO_TYPE) -> Any:
+    audio = base64.b64encode(words.encode()).decode()
+    return call.client.post(
+        f"/api/v1/voice/calls/{call.id}/speak",
+        json={"media_type": media_type, "audio_base64": audio},
+    )
+
+
+def test_a_whole_call_works_by_audio(client: TestClient) -> None:
+    call = Call(client)
+    spoken = _speak(call, ASHA_HR).json()
+    assert spoken["heard"] == ASHA_HR
+    assert spoken["state"] == "awaiting_code"
+    [audio] = spoken["reply_audio"]
+    assert audio["media_type"] == FAKE_AUDIO_TYPE
+    assert base64.b64decode(audio["audio_base64"]).decode() == spoken["replies"][0]
+    verified = _speak(call, _latest_code(client, ASHA_PHONE)).json()
+    assert verified["state"] == "ready"
+    assert "#" in call.transcript()[-2]["text"]  # the spoken code is masked too
+
+
+def test_silence_asks_again_and_changes_nothing(client: TestClient) -> None:
+    call = Call(client)
+    silent = _speak(call, "   ").json()
+    assert silent["replies"] == ["Sorry, I didn't hear anything. Please say that again."]
+    assert silent["state"] == "awaiting_id"
+
+
+def test_bad_audio_is_refused_without_touching_the_call(client: TestClient) -> None:
+    call = Call(client)
+    assert _speak(call, "hello", media_type="audio/wav").status_code == 415
+    bad = client.post(
+        f"/api/v1/voice/calls/{call.id}/speak",
+        json={"media_type": FAKE_AUDIO_TYPE, "audio_base64": "not base64!"},
+    )
+    assert bad.status_code == 422
+    assert _speak(call, ASHA_HR).json()["state"] == "awaiting_code"
+
+
+class BrokenSpeechToText:
+    model_name = "broken-stt"
+
+    async def transcribe(
+        self, audio: bytes, media_type: str, *, language_hint: str | None = None
+    ) -> Transcript:
+        raise SpeechError("down")
+
+
+def test_a_speech_outage_goes_to_a_person(settings: Settings, org: SeedResult) -> None:
+    broken = Speech(BrokenSpeechToText(), FakeTextToSpeech())
+    app = create_app(_settings(settings, org), job_queue=NullQueue(), speech=broken)
+    with TestClient(app) as client:
+        call = Call(client)
+        out = _speak(call, ASHA_HR).json()
+        assert out["state"] == "escalated"
+        assert _escalations(client)[call.id] == "system_failure"
+
+
+def test_without_a_speech_service_only_text_is_accepted(
+    settings: Settings, org: SeedResult
+) -> None:
+    no_speech = _settings(settings, org).model_copy(update={"speech": "none"})
+    with TestClient(create_app(no_speech, job_queue=NullQueue())) as client:
+        call = Call(client)
+        assert _speak(call, ASHA_HR).status_code == 503
+        assert call.say(ASHA_HR)  # typed text still works
+
+
+def test_misheard_glossary_names_are_corrected_for_verified_callers(
+    client: TestClient, org: SeedResult, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    added = client.post(
+        "/api/v1/glossary",
+        headers={"X-Dev-User": "dev|chitra"},
+        json={
+            "canonical": "Manipal Pharma Labs",
+            "aliases": ["MPL"],
+            "business_unit_id": str(org.business_units["bu-alpha"]),
+        },
+    )
+    assert added.status_code == 201, added.text
+    asked: list[str] = []
+
+    async def capture(request: Any, ctx: AuthContext, question: str) -> AskResponse:
+        asked.append(question)
+        return AskResponse(
+            query_id=uuid.uuid4(),
+            answer="",
+            abstained=True,
+            abstention_reason=None,
+            citations=[],
+            language="en",
+            model=None,
+        )
+
+    monkeypatch.setattr(apps.api.voice, "answer_question", capture)
+    call = _verified_call(client)
+    _speak(call, "Is the M P L canteen open on Sunday?")
+    assert asked == ["Is the MPL canteen open on Sunday?"]
+    # The transcript keeps what was heard.
+    assert "M P L" in [t["text"] for t in call.transcript() if t["speaker"] == "caller"][-1]
+
+    # Ravi (Beta) can't see Alpha's entry, so nothing of it is applied to his words.
+    ravi_hr, ravi_phone = synthetic_contact("ravi")
+    ravi = _verified_call(client, ravi_hr, ravi_phone)
+    _speak(ravi, "Is the M P L canteen open on Sunday?")
+    assert asked[-1] == "Is the M P L canteen open on Sunday?"

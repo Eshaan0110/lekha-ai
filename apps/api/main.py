@@ -35,8 +35,10 @@ from apps.api.readiness import build_readiness_checks
 from apps.wiring import (
     ArqJobQueue,
     JobQueue,
+    Speech,
     build_embedder,
     build_language_model,
+    build_speech,
     build_vector_index,
 )
 from db.audit import PostgresAuditSink
@@ -67,6 +69,7 @@ def create_app(
     job_queue: JobQueue | None = None,
     language_model: LanguageModel | None = None,
     ask_limiter: RateLimiter | None = None,
+    speech: Speech | None = None,
 ) -> FastAPI:
     """Build the API. Tests may inject settings, readiness checks, audit sink and store."""
     settings = settings or Settings()  # values come from the environment
@@ -99,6 +102,7 @@ def create_app(
         app.state.vector_index = build_vector_index(settings, embedder.dimensions)
         app.state.job_queue = job_queue or ArqJobQueue(settings)
         app.state.language_model = language_model or build_language_model(settings)
+        app.state.speech = speech or build_speech(settings)
         app.state.ask_limiter = ask_limiter or RedisRateLimiter(
             redis,
             namespace=f"lekha:{settings.postgres_db}",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from typing import Protocol
 
 from arq import create_pool
@@ -15,9 +16,13 @@ from model_layer import (
     BgeM3Embedder,
     Embedder,
     FakeEmbedder,
+    FakeSpeechToText,
+    FakeTextToSpeech,
     LanguageModel,
     MiniLmEmbedder,
     OllamaModel,
+    SpeechToText,
+    TextToSpeech,
 )
 
 INGEST_FUNCTION = "ingest"
@@ -47,6 +52,20 @@ def build_language_model(settings: Settings) -> LanguageModel | None:
             settings.bedrock_model_id,
             timeout_seconds=settings.llm_timeout_seconds,
         )
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class Speech:
+    stt: SpeechToText
+    tts: TextToSpeech
+
+
+def build_speech(settings: Settings) -> Speech | None:
+    """None when no speech is configured: the phone simulator then takes typed text only.
+    "fake" is the labelled SIMULATION; the settings allow it only in local and test."""
+    if settings.speech == "fake":
+        return Speech(FakeSpeechToText(), FakeTextToSpeech())
     return None
 
 

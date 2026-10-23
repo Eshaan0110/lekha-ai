@@ -50,6 +50,8 @@ def settings() -> Settings:
             "embedder": "fake",
             # No real language model unless a test injects one (tests never call Ollama).
             "llm": "none",
+            # The phone simulator's speech is the labelled fake.
+            "speech": "fake",
         }
     )
     asyncio.run(S3ObjectStore.from_settings(test_settings).ensure_bucket())

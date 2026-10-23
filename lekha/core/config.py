@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     # the production default (Claude via AWS Bedrock Mumbai), blocked until the AWS account
     # exists. Tests inject a fake model directly.
     llm: Literal["none", "ollama", "bedrock"] = "none"
+    # Speech for the phone line. "fake" is a SIMULATION (typed text as audio), allowed only
+    # in local and test; a real provider needs the owner's authorisation (Phase 5 D2).
+    speech: Literal["none", "fake"] = "none"
     ollama_url: AnyHttpUrl = AnyHttpUrl("http://127.0.0.1:11434")
     ollama_model: str = Field(
         default="qwen3.5:9b", pattern=r"^[a-z0-9][a-z0-9._-]*(:[a-z0-9._-]+)?$"
@@ -172,6 +175,12 @@ class Settings(BaseSettings):
             raise ValueError("LEKHA_OLLAMA_MODEL must be a local model, not a cloud one")
         if self.llm == "bedrock" and not self.bedrock_model_id:
             raise ValueError("LEKHA_LLM=bedrock requires LEKHA_BEDROCK_MODEL_ID")
+        return self
+
+    @model_validator(mode="after")
+    def _fake_speech_only_locally(self) -> Self:
+        if self.speech == "fake" and self.environment not in {Environment.LOCAL, Environment.TEST}:
+            raise ValueError("LEKHA_SPEECH=fake is a simulation for local and test only")
         return self
 
     @model_validator(mode="after")

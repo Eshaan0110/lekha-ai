@@ -153,6 +153,44 @@ export interface Proposal {
   can_decide: boolean;
 }
 
+export interface CallView {
+  id: string;
+  state:
+    | "awaiting_id"
+    | "awaiting_code"
+    | "ready"
+    | "describing_issue"
+    | "confirming_ticket"
+    | "escalated"
+    | "ended";
+  language: string | null;
+  replies: string[];
+  heard?: string;
+}
+
+export interface OutboxMessage {
+  phone: string;
+  kind: "verification_code" | "answer" | "ticket";
+  body: string;
+  at: string;
+}
+
+export interface EscalationItem {
+  call_id: string;
+  reason: string;
+  status: string;
+  at: string;
+}
+
+/** SIMULATION: the fake speech service's "audio" is the UTF-8 text itself. */
+export const FAKE_AUDIO_TYPE = "application/vnd.lekha.fake-audio";
+
+function fakeAudio(text: string): string {
+  let binary = "";
+  for (const byte of new TextEncoder().encode(text)) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -253,6 +291,28 @@ export const api = {
     }),
 
   deleteGlossary: (user: string, id: string) => call<void>(user, `/glossary/${id}`, { method: "DELETE" }),
+
+  // Phone simulator (development only; no sign-in: callers verify on the call).
+  startCall: (user: string, callerNumber: string) =>
+    call<CallView>(user, "/voice/calls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caller_number: callerNumber }),
+    }),
+
+  speak: (user: string, callId: string, words: string) =>
+    call<CallView>(user, `/voice/calls/${callId}/speak`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ media_type: FAKE_AUDIO_TYPE, audio_base64: fakeAudio(words) }),
+    }),
+
+  hangUp: (user: string, callId: string) =>
+    call<CallView>(user, `/voice/calls/${callId}/hangup`, { method: "POST" }),
+
+  outbox: (user: string) => call<OutboxMessage[]>(user, "/voice/outbox"),
+
+  escalations: (user: string) => call<EscalationItem[]>(user, "/voice/escalations"),
 
   proposals: (user: string) => call<Proposal[]>(user, "/actions"),
 
